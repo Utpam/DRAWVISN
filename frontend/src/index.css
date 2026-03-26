@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+:root{
+    background-color: black;
+}
+
+@font-face {
+    font-family: poppins-bold;
+    src: url(assets/Fonts/Poppins-Bold.ttf);
+}
