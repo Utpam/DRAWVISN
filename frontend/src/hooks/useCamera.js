@@ -1,8 +1,11 @@
 import { useRef, useState } from "react";
+import { useDrawing } from "./useDrawing";
 
 export const useCamera = () => {
+   
     const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });  // Camera state
     const panRef = useRef({ active: false, startScreenX: 0, startScreenY: 0, startCameraX: 0, startCameraY: 0 });
+
 
     const screenToWorld = (screenX, screenY) => {
         return {
@@ -46,13 +49,19 @@ export const useCamera = () => {
     };
 
     const handleZoom = (e) => {
-        e.preventDefault();
+        // e.preventDefault();
 
         const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
         setCamera(prev => {
             const nextZoom = Math.max(0.2, Math.min(5, prev.zoom * zoomFactor));
+            
+            // Calculate new camera position to zoom in on the mouse pointer location
+            const nextX = prev.x + (e.clientX / prev.zoom) - (e.clientX / nextZoom);
+            const nextY = prev.y + (e.clientY / prev.zoom) - (e.clientY / nextZoom);
+            
             return {
-                ...prev,
+                x: nextX,
+                y: nextY,
                 zoom: nextZoom,
             };
         });

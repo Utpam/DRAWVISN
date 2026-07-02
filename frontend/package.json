@@ -10,10 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^8.6.0",
     "@tailwindcss/vite": "^4.2.2",
     "axios": "^1.13.6",
+    "firebase": "^12.14.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-router-dom": "^7.18.1",
     "tailwindcss": "^4.2.2",
     "zustand": "^5.0.12"
   },

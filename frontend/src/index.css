@@ -1,10 +1,184 @@
 @import "tailwindcss";
 
-:root{
-    background-color: rgb(35, 35, 35);
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRAVISN — Global Theme System
+   All UI colours live here as CSS custom properties.
+   Switching data-theme on <html> flips the entire app between dark / light.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark mode (default) ──────────────────────────────────────────────────── */
+:root,
+html[data-theme="dark"] {
+    /* Canvas */
+    --canvas-bg:        #1c1c1e;
+    --canvas-dot:       rgba(255,255,255,0.06);
+
+    /* Surfaces */
+    --surface-0:        #111113;   /* deepest */
+    --surface-1:        #1a1a1d;   /* panels */
+    --surface-2:        #26262b;   /* cards / inputs */
+    --surface-3:        #32323a;   /* hover states */
+
+    /* Borders */
+    --border:           rgba(255,255,255,0.07);
+    --border-strong:    rgba(255,255,255,0.14);
+
+    /* Text */
+    --text-primary:     #f4f4f5;
+    --text-secondary:   #a1a1aa;
+    --text-muted:       #52525b;
+
+    /* Brand */
+    --brand:            #6366f1;
+    --brand-hover:      #818cf8;
+    --brand-muted:      rgba(99,102,241,0.15);
+
+    /* Toolbar pill */
+    --toolbar-bg:       rgba(24,24,27,0.92);
+    --toolbar-border:   rgba(255,255,255,0.08);
+
+    /* Shadow */
+    --shadow-lg:        0 8px 40px rgba(0,0,0,0.55);
+
+    background-color: var(--canvas-bg);
 }
 
+/* ── Light mode ───────────────────────────────────────────────────────────── */
+html[data-theme="light"] {
+    /* Canvas */
+    --canvas-bg:        #f8f8fb;
+    --canvas-dot:       rgba(0,0,0,0.07);
+
+    /* Surfaces */
+    --surface-0:        #ffffff;
+    --surface-1:        #f4f4f6;
+    --surface-2:        #ebebef;
+    --surface-3:        #e0e0e7;
+
+    /* Borders */
+    --border:           rgba(0,0,0,0.07);
+    --border-strong:    rgba(0,0,0,0.14);
+
+    /* Text */
+    --text-primary:     #18181b;
+    --text-secondary:   #52525b;
+    --text-muted:       #a1a1aa;
+
+    /* Brand */
+    --brand:            #6366f1;
+    --brand-hover:      #4f46e5;
+    --brand-muted:      rgba(99,102,241,0.12);
+
+    /* Toolbar pill */
+    --toolbar-bg:       rgba(255,255,255,0.94);
+    --toolbar-border:   rgba(0,0,0,0.10);
+
+    /* Shadow */
+    --shadow-lg:        0 8px 40px rgba(0,0,0,0.12);
+
+    background-color: var(--canvas-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Global resets
+═══════════════════════════════════════════════════════════════════════════ */
+
+* {
+    user-select: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dot-grid canvas background
+   Applied to the canvas wrapper element via .canvas-bg class
+═══════════════════════════════════════════════════════════════════════════ */
+.canvas-bg {
+    background-color: var(--canvas-bg);
+    background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Typography
+═══════════════════════════════════════════════════════════════════════════ */
 @font-face {
     font-family: poppins-bold;
     src: url(assets/Fonts/Poppins-Bold.ttf);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Number input — remove browser arrows
+═══════════════════════════════════════════════════════════════════════════ */
+.remove-input-arrow::-webkit-inner-spin-button,
+.remove-input-arrow::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.remove-input-arrow {
+    -moz-appearance: textfield;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Theme-aware utility helpers
+   (Tailwind can't interpolate CSS vars, so these fill the gap)
+═══════════════════════════════════════════════════════════════════════════ */
+.t-surface-0  { background: var(--surface-0); }
+.t-surface-1  { background: var(--surface-1); }
+.t-surface-2  { background: var(--surface-2); }
+.t-border     { border-color: var(--border); }
+.t-text       { color: var(--text-primary); }
+.t-text-2     { color: var(--text-secondary); }
+.t-text-muted { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Toast animations
+═══════════════════════════════════════════════════════════════════════════ */
+@keyframes slide-in {
+    from { opacity: 0; transform: translateX(120%); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-progress {
+    from { width: 100%; }
+    to   { width: 0%; }
+}
+
+.animate-slide-in {
+    animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-toast-progress {
+    animation: toast-progress 4s linear forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Scrollbar — thin, theme-aware
+═══════════════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Range input thumb — theme-aware (needed because appearance:none removes it)
+═══════════════════════════════════════════════════════════════════════════ */
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--brand);
+    cursor: pointer;
+    border: 2px solid var(--surface-0);
+    box-shadow: 0 0 0 1px var(--brand);
+    transition: transform 0.1s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--brand);
+    cursor: pointer;
+    border: 2px solid var(--surface-0);
 }

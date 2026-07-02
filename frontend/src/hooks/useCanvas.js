@@ -8,8 +8,8 @@ export const useCanvas = () => {
 
   const canvasRef = useRef(null);
   const state = useCanvasState();
-  const camera = useCamera();
-  const { renderers } = useRenderer(canvasRef, state.shapes, camera.camera);
+  const camera = useCamera()
+  const { renderers } = useRenderer(canvasRef, state.shapes, camera.camera, state.selectedIds);
   const drawing = useDrawing(canvasRef, state, camera, renderers);
 
   return {

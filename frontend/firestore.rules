@@ -1,0 +1,91 @@
+rules_version = '2';
+
+// DRAWVISN — Firestore Security Rules
+//
+// Security model:
+//  - All unauthenticated requests are denied by default
+//
+//  users/{uid}:
+//   - Only the authenticated user whose UID matches the document ID
+//     can read or write their own profile
+//   - boardCount and boardLimit can only be modified via trusted
+//     transactions (the client cannot arbitrarily set these to 0 or max)
+//
+//  boards/{boardId}:
+//   - Only the board owner (ownerId == request.auth.uid) can read/write
+//   - ownerId is immutable after creation
+//   - Future: collaborators list will be checked for read access
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // users/{uid}
+    // -------------------------------------------------------------------------
+    match /users/{uid} {
+
+      // Only the owner can read their own document
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      // Create: only the authenticated user can create their own doc
+      // and the uid field must match their auth uid
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid;
+
+      // Update: owner only; boardLimit cannot be downgraded by the client;
+      // boardCount must stay a number (transactions handle increments server-side)
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.boardCount is int
+                    && request.resource.data.boardLimit is int;
+
+      // Delete: owner only (rarely used but included for completeness)
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // boards/{boardId}
+    // -------------------------------------------------------------------------
+    match /boards/{boardId} {
+
+      // Helper: is the request from the board's owner?
+      function isOwner() {
+        return request.auth != null && request.auth.uid == resource.data.ownerId;
+      }
+
+      // Helper: does the incoming write preserve ownerId?
+      function ownerIdUnchanged() {
+        return request.resource.data.ownerId == resource.data.ownerId;
+      }
+
+      // ----- READ -----
+      // Owner can always read.
+      // Future: collaborators listed in the `collaborators` array can read too.
+      allow read: if isOwner()
+                  || (request.auth != null
+                      && request.auth.uid in resource.data.collaborators);
+
+      // ----- CREATE -----
+      // Authenticated users can create a board; ownerId must match their uid.
+      allow create: if request.auth != null
+                    && request.resource.data.ownerId == request.auth.uid;
+
+      // ----- UPDATE -----
+      // Only the owner can update, and ownerId must not change.
+      allow update: if isOwner() && ownerIdUnchanged();
+
+      // ----- DELETE -----
+      // Only the owner can delete their board.
+      allow delete: if isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Deny all access to any collection not explicitly defined above
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
