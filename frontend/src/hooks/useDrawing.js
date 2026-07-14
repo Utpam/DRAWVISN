@@ -43,7 +43,7 @@ const doPointsIntersectShape = (points, shape) => {
             }
         } else if (shape.type === "circle") {
             // if (Math.hypot(p.x - shape.x, p.y - shape.y) <= shape.radius + 5) {
-            if (Math.hypot(p.x - shape.x, p.y - shape.y) <= shape.radius) {
+            if (Math.hypot(p.x - shape.x, p.y - shape.y) <= shape.radiusX) {
 
                 console.log("erased shape:", shape)
                 console.log(Math.hypot(p.x - shape.x, p.y - shape.y))
@@ -317,7 +317,9 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 type: "circle",
                 x: startX,
                 y: startY,
-                radius: Math.hypot(dx, dy),
+                radiusX: dx,
+                radiusY: dy,
+                // radius: Math.hypot(dx, dy),
                 style: currentStyle,
             };
             renderers.circle(ctx, previewCirlce);
@@ -523,7 +525,9 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                     type: "circle",
                     x: startX,
                     y: startY,
-                    radius: Math.hypot(dx, dy),
+                    // radius: Math.hypot(dx, dy),
+                    radiusX: dx,
+                    radiusY: dy,
                     style: { ...currentStyle },
                 },
             ]);

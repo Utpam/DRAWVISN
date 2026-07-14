@@ -50,7 +50,7 @@ export const useCamera = () => {
 
     const handleZoom = (e) => {
         // e.preventDefault();
-
+        if(!e.ctrlKey) return;
         const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
         setCamera(prev => {
             const nextZoom = Math.max(0.2, Math.min(5, prev.zoom * zoomFactor));

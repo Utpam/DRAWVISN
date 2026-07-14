@@ -86,7 +86,8 @@ export const useRenderer = (canvasRef, shapes, camera = { x: 0, y: 0, zoom: 1 },
             ctx.save();
             applyStyle(ctx, s);
             ctx.beginPath();
-            ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
+            // ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
+            ctx.ellipse(shape.x, shape.y, shape.radiusX,shape.radiusY, 0, 0, 2 * Math.PI);
             if (s.fillColor !== "transparent") {
                 ctx.fill();
             }

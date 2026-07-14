@@ -21,10 +21,10 @@ export const getBoundingBox = (shape) => {
             };
         case "circle":
             return {
-                minX: shape.x - shape.radius,
-                minY: shape.y - shape.radius,
-                maxX: shape.x + shape.radius,
-                maxY: shape.y + shape.radius,
+                minX: shape.x - shape.radiusX,
+                minY: shape.y - shape.radiusY,
+                maxX: shape.x + shape.radiusX,
+                maxY: shape.y + shape.radiusY,
             };
         case "line":
             return {
@@ -67,7 +67,7 @@ export const doCoordsIntersectShape = (x, y, shape) => {
     if (x >= bb.minX - padding && x <= bb.maxX + padding && y >= bb.minY - padding && y <= bb.maxY + padding) {
         if (shape.type === "circle") {
             const dist = Math.hypot(x - shape.x, y - shape.y);
-            return dist <= shape.radius + padding;
+            return dist <= shape.radiusX + shape.radiusY + padding;
         } else if (shape.type === "line") {
             const dist = pointToLineDistance({x, y}, {x: shape.x1, y: shape.y1}, {x: shape.x2, y: shape.y2});
             return dist <= 10;
