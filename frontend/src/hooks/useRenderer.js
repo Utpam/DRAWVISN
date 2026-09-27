@@ -3,7 +3,14 @@ import { getBoundingBox } from "./useTransform.js";
 import { applyStyle } from "../utils/applyStyle.js";
 import { DEFAULT_STYLE } from "../styles/defaultStyle.js";
 
-export const useRenderer = (canvasRef, shapes, camera = { x: 0, y: 0, zoom: 1 }, selectedIds = []) => {
+export const useRenderer = (
+    canvasRef,
+    shapes,
+    camera = { x: 0, y: 0, zoom: 1 },
+    selectedIds = [],
+    remoteStrokes = {},
+    remoteSelections = {}
+) => {
 
     // -------------------------------------------------------------------------
     // Renderer functions
@@ -145,13 +152,22 @@ export const useRenderer = (canvasRef, shapes, camera = { x: 0, y: 0, zoom: 1 },
             -camera.y * camera.zoom
         );
 
-        // Draw all shapes (each renderer manages its own save/restore)
+        // 1. Draw all saved shapes
         shapes.forEach(shape => {
             if (!shape || !shape.type || !renderers[shape.type]) return;
             renderers[shape.type](ctx, shape);
         });
 
-        // Draw selection highlights on top
+        // 2. Draw live in-progress remote pen strokes
+        if (remoteStrokes && Object.keys(remoteStrokes).length > 0) {
+            Object.values(remoteStrokes).forEach(stroke => {
+                if (stroke && renderers.pen) {
+                    renderers.pen(ctx, stroke);
+                }
+            });
+        }
+
+        // 3. Draw local selection highlights on top
         shapes.forEach(shape => {
             if (!selectedIds || !selectedIds.includes(shape.id)) return;
 
@@ -185,9 +201,28 @@ export const useRenderer = (canvasRef, shapes, camera = { x: 0, y: 0, zoom: 1 },
             ctx.restore();
         });
 
+        // 4. Draw remote collaborator selections with subtle colored dashes
+        if (remoteSelections && Object.keys(remoteSelections).length > 0) {
+            Object.entries(remoteSelections).forEach(([socketId, selData]) => {
+                if (!selData || !selData.selectedIds) return;
+                shapes.forEach(shape => {
+                    if (selData.selectedIds.includes(shape.id)) {
+                        const bb = getBoundingBox(shape);
+                        if (!bb) return;
+                        ctx.save();
+                        ctx.strokeStyle = "rgba(244, 63, 94, 0.85)";
+                        ctx.lineWidth = 1.5 / camera.zoom;
+                        ctx.setLineDash([4, 4]);
+                        ctx.strokeRect(bb.minX - 2, bb.minY - 2, bb.maxX - bb.minX + 4, bb.maxY - bb.minY + 4);
+                        ctx.restore();
+                    }
+                });
+            });
+        }
+
         // Reset transform
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }, [shapes, camera, selectedIds]);
+    }, [shapes, camera, selectedIds, remoteStrokes, remoteSelections]);
 
     return { renderers };
 };

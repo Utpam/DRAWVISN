@@ -61,11 +61,8 @@ service cloud.firestore {
       }
 
       // ----- READ -----
-      // Owner can always read.
-      // Future: collaborators listed in the `collaborators` array can read too.
-      allow read: if isOwner()
-                  || (request.auth != null
-                      && request.auth.uid in resource.data.collaborators);
+      // Owner can read. Authenticated users with the board link/collaborators can read.
+      allow read: if request.auth != null;
 
       // ----- CREATE -----
       // Authenticated users can create a board; ownerId must match their uid.

@@ -51,6 +51,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/board/:boardId"
+            element={
+              <ProtectedRoute>
+                <BoardPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Catch-all */}
           <Route path="*" element={<NotFoundPage />} />

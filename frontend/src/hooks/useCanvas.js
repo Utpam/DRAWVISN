@@ -4,13 +4,20 @@ import { useCanvasState } from "./useCanvasState";
 import { useRenderer } from "./useRenderer";
 import { useCamera } from "./useCamera";
 
-export const useCanvas = () => {
+export const useCanvas = (options = {}) => {
 
   const canvasRef = useRef(null);
   const state = useCanvasState();
-  const camera = useCamera()
-  const { renderers } = useRenderer(canvasRef, state.shapes, camera.camera, state.selectedIds);
-  const drawing = useDrawing(canvasRef, state, camera, renderers);
+  const camera = useCamera();
+  const { renderers } = useRenderer(
+    canvasRef,
+    state.shapes,
+    camera.camera,
+    state.selectedIds,
+    options.remoteStrokes || {},
+    options.remoteSelections || {}
+  );
+  const drawing = useDrawing(canvasRef, state, camera, renderers, options);
 
   return {
     canvasRef,

@@ -71,7 +71,7 @@ const doPointsIntersectShape = (points, shape) => {
 };
 
 
-export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, selectedIds, setSelectedIds, currentStyle }, camera, renderers) => {
+export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, selectedIds, setSelectedIds, currentStyle }, camera, renderers, options = {}) => {
     const currentStroke = useRef(null);
     const isDrawingRef = useRef(false);
     const transformRef = useRef([])
@@ -163,6 +163,10 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
         points: [{ x, y }],
         style: { ...currentStyle },
       };
+
+      if (options?.onStrokeStart) {
+        options.onStrokeStart(currentStroke.current);
+      }
 
       isDrawingRef.current = true;
       return;
@@ -409,6 +413,9 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
             ctx.restore();
             
             points.push({x, y});
+            if (options?.onStrokeUpdate && currentStroke.current) {
+                options.onStrokeUpdate(currentStroke.current.id, [{ x, y }]);
+            }
             return;
         }
 
@@ -459,20 +466,48 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
         if (!isDrawingRef.current) return;
 
         if (tool === "pen") {
-            if (currentStroke.current) { 
-                setShapes(prev => [...prev, currentStroke.current]);
+            if (currentStroke.current && currentStroke.current.points && currentStroke.current.points.length > 0) {
+                const newShape = {
+                    ...currentStroke.current,
+                    style: { ...currentStyle },
+                };
+                setShapes(prev => [...prev, newShape]);
+                if (options?.onStrokeEnd) {
+                    options.onStrokeEnd(currentStroke.current.id, newShape);
+                } else if (options?.onShapeCreated) {
+                    options.onShapeCreated(newShape);
+                }
             }
         }
 
         if(tool === "eraser") {
             const eraser = currentStroke.current;
-            if (eraser && eraser.points.length > 0) {
-                setShapes(prev => prev.filter(shape => !doPointsIntersectShape(eraser.points, shape)));
+            if (eraser && eraser.points && eraser.points.length > 0) {
+                const deletedIds = [];
+                setShapes(prev => {
+                    const remaining = [];
+                    for (const shape of prev) {
+                        if (doPointsIntersectShape(eraser.points, shape)) {
+                            deletedIds.push(shape.id);
+                        } else {
+                            remaining.push(shape);
+                        }
+                    }
+                    return remaining;
+                });
+                if (deletedIds.length > 0 && options?.onShapesDeleted) {
+                    options.onShapesDeleted(deletedIds);
+                }
             }
         }
 
         if (tool === "selectBox") {
-            if (actionMode.current === "SELECT") {
+            if (actionMode.current === "MOVE") {
+                const movedShapes = shapes.filter(s => selectedIds.includes(s.id));
+                if (movedShapes.length > 0 && options?.onShapesUpdated) {
+                    options.onShapesUpdated(movedShapes);
+                }
+            } else if (actionMode.current === "SELECT") {
                 const { x: startX, y: startY } = startPos.current;
                 const { x, y } = getCoords(e);
                 const minX = Math.min(startX, x);
@@ -489,7 +524,13 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                     return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
                 }).map(s => s.id);
 
-                if (newSelected.length > 0) setSelectedIds(newSelected);
+                if (newSelected.length > 0) {
+                    setSelectedIds(newSelected);
+                    if (options?.onSelectionUpdate) options.onSelectionUpdate(newSelected);
+                } else if (selectedIds?.length > 0) {
+                    setSelectedIds([]);
+                    if (options?.onSelectionUpdate) options.onSelectionUpdate([]);
+                }
             }
             actionMode.current = null;
         };
@@ -498,18 +539,24 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
             const { x: startX, y: startY } = startPos.current;
             const { x, y } = getCoords(e);
 
+            const newShape = {
+                id: generateId(),
+                type: "rect",
+                x: startX,
+                y: startY,
+                width: x - startX,
+                height: y - startY,
+                style: { ...currentStyle },
+            };
+
             setShapes(prev => [
                 ...prev,
-                {
-                    id: generateId(),
-                    type: "rect",
-                    x: startX,
-                    y: startY,
-                    width: x - startX,
-                    height: y - startY,
-                    style: { ...currentStyle },
-                },
+                newShape,
             ]);
+
+            if (options?.onShapeCreated) {
+                options.onShapeCreated(newShape);
+            }
         };
 
         if (tool === "circle") {
@@ -518,41 +565,46 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
 
             const dx = x - startX;
             const dy = y - startY;
+            const newShape = {
+                id: generateId(),
+                type: "circle",
+                x: startX,
+                y: startY,
+                radiusX: dx,
+                radiusY: dy,
+                style: { ...currentStyle },
+            };
             setShapes(prev => [
                 ...prev,
-                {
-                    id: generateId(),
-                    type: "circle",
-                    x: startX,
-                    y: startY,
-                    // radius: Math.hypot(dx, dy),
-                    radiusX: dx,
-                    radiusY: dy,
-                    style: { ...currentStyle },
-                },
+                newShape,
             ]);
+            if (options?.onShapeCreated) {
+                options.onShapeCreated(newShape);
+            }
         };
 
         if (tool === "line") {
             const { x: startX, y: startY } = startPos.current;
             const { x, y } = getCoords(e);
 
+            const newShape = {
+                id: generateId(),
+                type: "line",
+                x1: startX,
+                y1: startY,
+                x2: x,
+                y2: y,
+                style: { ...currentStyle },
+            };
             setShapes(prev => [
                 ...prev,
-                {
-                    id: generateId(),
-                    type: "line",
-                    x1: startX,
-                    y1: startY,
-                    x2: x,
-                    y2: y,
-                    style: { ...currentStyle },
-                },
+                newShape,
             ]);
+            if (options?.onShapeCreated) {
+                options.onShapeCreated(newShape);
+            }
         };
         isDrawingRef.current = false;
-
-        
     };
     
     const clearCanvas = () => {
@@ -562,6 +614,9 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
         setShapes([]);
+        if (options?.onCanvasCleared) {
+            options.onCanvasCleared();
+        }
         console.log("clear", shapes)
     };
 
