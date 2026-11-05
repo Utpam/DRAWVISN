@@ -34,6 +34,8 @@ function LoginPage() {
       console.error("[LoginPage] login error:", err);
       if (err.code === "auth/popup-closed-by-user") {
         setError("Sign-in was cancelled. Please try again.");
+      } else if (err.code === "firebase/not-configured") {
+        setError("Firebase is not configured. Add your Firebase web app settings to frontend/.env.");
       } else {
         setError("Sign-in failed. Please try again.");
       }

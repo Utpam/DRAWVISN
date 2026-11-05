@@ -1,526 +1,354 @@
-/**
- * StylePanel.jsx — Floating Shape Style Inspector & Editor
- *
- * Context-aware:
- *  - No selection → edits `currentStyle` (future shapes)
- *  - 1+ shapes selected → immediately edits every selected shape's style
- *
- * Fully theme-aware via CSS custom properties (no hardcoded dark colours).
- * Collapses to an icon strip on the right edge of the viewport.
- */
-
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { DEFAULT_STYLE } from "../styles/defaultStyle";
+import { getThemeStrokeColor, resolveThemeStrokeColor } from "../utils/themeStroke";
 
-// ─── Preset palettes ─────────────────────────────────────────────────────────
-
-const STROKE_COLORS = [
-  { label: "Black",  value: "#1a1a1a" },
-  { label: "White",  value: "#ffffff" },
-  { label: "Red",    value: "#ef4444" },
+const ALL_COLORS = [
+  { label: "Black", value: "#1a1a1a" },
+  { label: "White", value: "#ffffff" },
+  { label: "Red", value: "#ef4444" },
   { label: "Orange", value: "#f97316" },
   { label: "Yellow", value: "#eab308" },
-  { label: "Green",  value: "#22c55e" },
-  { label: "Cyan",   value: "#06b6d4" },
-  { label: "Blue",   value: "#3b82f6" },
+  { label: "Green", value: "#22c55e" },
+  { label: "Cyan", value: "#06b6d4" },
+  { label: "Blue", value: "#3b82f6" },
   { label: "Purple", value: "#a855f7" },
-  { label: "Pink",   value: "#ec4899" },
+  { label: "Pink", value: "#ec4899" },
 ];
 
-const FILL_COLORS = [
-  { label: "None", value: "transparent" },
-  ...STROKE_COLORS,
-];
-
+const STROKE_COLORS = ALL_COLORS.filter(
+  (color) => color.value !== "#1a1a1a" && color.value !== "#ffffff"
+);
+const FILL_COLORS = [{ label: "No fill", value: "transparent" }, ...ALL_COLORS];
 const STROKE_WIDTHS = [1, 2, 4, 6, 8, 10];
-
 const LINE_STYLES = [
-  { value: "solid",  label: "—",   title: "Solid" },
-  { value: "dashed", label: "╌╌",  title: "Dashed" },
-  { value: "dotted", label: "···", title: "Dotted" },
+  { value: "solid", label: "Solid" },
+  { value: "dashed", label: "Dash" },
+  { value: "dotted", label: "Dot" },
 ];
-
-const LINE_CAPS  = [
-  { value: "butt",   label: "Butt"   },
-  { value: "round",  label: "Round"  },
+const LINE_CAPS = [
+  { value: "butt", label: "Butt" },
+  { value: "round", label: "Round" },
   { value: "square", label: "Square" },
 ];
-
 const LINE_JOINS = [
   { value: "miter", label: "Miter" },
   { value: "round", label: "Round" },
   { value: "bevel", label: "Bevel" },
 ];
 
-// ─── Shared styles (inline, so they respond to CSS vars) ─────────────────────
-
-const panelStyle = {
-  background:         "var(--surface-1)",
-  border:             "1px solid var(--border)",
-  boxShadow:          "var(--shadow-lg)",
-  backdropFilter:     "blur(24px)",
-  WebkitBackdropFilter: "blur(24px)",
-};
-
-const headerStyle = {
-  borderBottom: "1px solid var(--border)",
-  cursor: "pointer",
-};
-
-const labelStyle = {
-  fontSize: 9,
-  fontWeight: 700,
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  color: "var(--text-muted)",
-  display: "block",
-  marginBottom: 6,
-  marginTop: 4,
-};
-
-const btnBase = {
-  border: "none",
-  cursor: "pointer",
-  transition: "background 0.12s, color 0.12s, box-shadow 0.12s",
-};
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function SectionLabel({ children }) {
-  return <span style={labelStyle}>{children}</span>;
+function Section({ title, children, className = "" }) {
+  return (
+    <section className={`property-section ${className}`}>
+      <h3 className="property-section__title">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
-function Swatch({ color, active, onClick, title }) {
-  const isTransparent = color === "transparent";
+function Swatch({ color, active, onClick, label }) {
   return (
     <button
-      title={title}
+      type="button"
+      className={`property-swatch${active ? " is-active" : ""}${color === "transparent" ? " is-empty" : ""}`}
+      style={color === "transparent" ? undefined : { "--swatch-color": color }}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
       onClick={() => onClick(color)}
-      style={{
-        ...btnBase,
-        width: 20, height: 20,
-        borderRadius: "50%",
-        flexShrink: 0,
-        backgroundColor: isTransparent ? "transparent" : color,
-        outline: active ? "2px solid var(--brand)" : "2px solid transparent",
-        outlineOffset: 2,
-        transform: active ? "scale(1.15)" : "scale(1)",
-        padding: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}
     >
-      {isTransparent && (
-        <svg viewBox="0 0 20 20" fill="none" style={{ width: "100%", height: "100%" }}>
-          <circle cx="10" cy="10" r="8" stroke="var(--border-strong)" strokeWidth="1.5" strokeDasharray="3 2" />
-          <line x1="3" y1="17" x2="17" y2="3" stroke="#ef4444" strokeWidth="1.5" />
-        </svg>
-      )}
+      {color === "transparent" && <span aria-hidden="true" />}
     </button>
   );
 }
 
-function SegmentedControl({ options, value, onChange }) {
+function SegmentedControl({ label, options, value, onChange }) {
   return (
-    <div style={{
-      display: "flex", gap: 2,
-      background: "var(--surface-2)",
-      borderRadius: 9,
-      padding: 2,
-    }}>
-      {options.map(opt => {
-        const isActive = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            title={opt.title ?? opt.label}
-            onClick={() => onChange(opt.value)}
-            style={{
-              ...btnBase,
-              flex: 1,
-              paddingTop: 4, paddingBottom: 4,
-              borderRadius: 7,
-              fontSize: 10,
-              fontWeight: 600,
-              background: isActive ? "var(--brand)" : "transparent",
-              color: isActive ? "#fff" : "var(--text-secondary)",
-              boxShadow: isActive ? "0 1px 6px rgba(99,102,241,0.3)" : "none",
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
+    <div className="property-segmented" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={value === option.value ? "is-active" : ""}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-function Toggle({ enabled, onChange }) {
+function RangeControl({ label, min, max, step, value, onChange, format }) {
   return (
-    <button
-      role="switch"
-      aria-checked={enabled}
-      onClick={() => onChange(!enabled)}
-      style={{
-        ...btnBase,
-        position: "relative",
-        width: 36, height: 20,
-        borderRadius: 10,
-        background: enabled ? "var(--brand)" : "var(--surface-3)",
-        padding: 0,
-        flexShrink: 0,
-      }}
-    >
-      <span style={{
-        position: "absolute",
-        top: 2, left: enabled ? 17 : 2,
-        width: 16, height: 16,
-        borderRadius: "50%",
-        background: "#fff",
-        transition: "left 0.18s ease",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-      }} />
-    </button>
-  );
-}
-
-function StyledRange({ min, max, step, value, onChange, label }) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{min}</span>
-        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-secondary)" }}>{label}</span>
-        <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{max}</span>
-      </div>
+    <label className="property-range">
+      <span className="property-range__heading">
+        <span>{label}</span>
+        <output>{format(value)}</output>
+      </span>
       <input
         type="range"
-        min={min} max={max} step={step} value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        style={{
-          width: "100%",
-          height: 4,
-          borderRadius: 99,
-          appearance: "none",
-          WebkitAppearance: "none",
-          cursor: "pointer",
-          background: `linear-gradient(to right, var(--brand) 0%, var(--brand) ${pct}%, var(--surface-3) ${pct}%, var(--surface-3) 100%)`,
-          outline: "none",
-          border: "none",
-        }}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        onChange={(event) => onChange(Number(event.target.value))}
       />
-    </div>
-  );
-}
-
-// ─── Custom colour picker button ──────────────────────────────────────────────
-
-function CustomColorPicker({ value, onChange, title = "Custom colour" }) {
-  return (
-    <label
-      title={title}
-      style={{
-        width: 20, height: 20, flexShrink: 0,
-        borderRadius: "50%",
-        border: "2px dashed var(--border-strong)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer",
-        transition: "border-color 0.12s",
-      }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = "var(--brand)"}
-      onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-strong)"}
-    >
-      <input
-        type="color"
-        value={/^#/.test(value) ? value : "#ffffff"}
-        onChange={e => onChange(e.target.value)}
-        className="sr-only"
-      />
-      <svg width="9" height="9" fill="none" stroke="var(--text-muted)" strokeWidth="2.5" viewBox="0 0 24 24">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
+      <span className="property-range__limits">
+        <span>{format(min)}</span>
+        <span>{format(max)}</span>
+      </span>
     </label>
   );
 }
 
-// ─── Main panel ───────────────────────────────────────────────────────────────
+function ColorControl({
+  title,
+  value,
+  colors,
+  onChange,
+  activeValue = value,
+  normalizeChange = (color) => color,
+}) {
+  const handleChange = (color) => onChange(normalizeChange(color));
 
-/**
- * @param {{
- *   currentStyle: object,
- *   setCurrentStyle: Function,
- *   selectedIds: string[],
- *   shapes: object[],
- *   setShapes: Function,
- *   isDark: boolean,
- * }} props
- */
-function StylePanel({ currentStyle, setCurrentStyle, selectedIds, shapes, setShapes, isDark }) {
-  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <Section title={title}>
+      <div className="property-color-row">
+        {colors.map((color) => (
+          <Swatch
+            key={color.value}
+            color={color.value}
+            label={color.label}
+            active={activeValue === color.value}
+            onClick={handleChange}
+          />
+        ))}
+        <label className="property-custom-color" title={`Custom ${title.toLowerCase()}`}>
+          <input
+            type="color"
+            value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"}
+            aria-label={`Custom ${title.toLowerCase()}`}
+            onChange={(event) => handleChange(event.target.value)}
+          />
+          <span aria-hidden="true">+</span>
+        </label>
+      </div>
+    </Section>
+  );
+}
 
+function StylePanel({ currentStyle, setCurrentStyle, selectedIds, shapes, setShapes, tool, isDark }) {
+  const [collapsed, setCollapsed] = useState(
+    () => window.matchMedia("(max-width: 700px)").matches
+  );
   const hasSelection = selectedIds?.length > 0;
-
   const selectedShape = hasSelection
-    ? shapes?.find(s => s.id === selectedIds[0])
+    ? shapes?.find((shape) => shape.id === selectedIds[0])
     : null;
-
+  const activeTool = selectedShape?.type || tool;
   const activeStyle = {
     ...DEFAULT_STYLE,
     ...(selectedShape?.style ?? currentStyle),
   };
+  const activeStrokeColor = resolveThemeStrokeColor(activeStyle.strokeColor, isDark);
+  const themeStrokeColors = [
+    ...STROKE_COLORS,
+    { label: isDark ? "White" : "Black", value: getThemeStrokeColor(isDark) },
+  ];
 
-  // Update selected shapes or currentStyle
   const update = useCallback((key, value) => {
     if (hasSelection) {
-      setShapes(prev =>
-        prev.map(s =>
-          selectedIds.includes(s.id)
-            ? { ...s, style: { ...DEFAULT_STYLE, ...(s.style ?? {}), [key]: value } }
-            : s
-        )
-      );
+      setShapes((previous) => previous.map((shape) => (
+        selectedIds.includes(shape.id)
+          ? {
+              ...shape,
+              style: { ...DEFAULT_STYLE, ...(shape.style ?? {}), [key]: value },
+            }
+          : shape
+      )));
     } else {
-      setCurrentStyle(prev => ({ ...prev, [key]: value }));
+      setCurrentStyle((previous) => ({ ...previous, [key]: value }));
     }
   }, [hasSelection, selectedIds, setShapes, setCurrentStyle]);
 
-  const modeLabel = hasSelection
-    ? selectedIds.length === 1 ? "Shape" : `${selectedIds.length} shapes`
-    : "Drawing";
+  const needsSelection = tool === "selectBox" && !hasSelection;
+  const isEraser = tool === "eraser" && !hasSelection;
+  const supportsFill = activeTool === "rect" || activeTool === "circle";
+  const supportsLineEnds = activeTool === "pen" || activeTool === "line";
+  const panelLabel = needsSelection
+    ? "Selection"
+    : isEraser
+      ? "Eraser"
+      : hasSelection
+        ? `${selectedIds.length} selected`
+        : `${activeTool} properties`;
 
   return (
-    <div
-      id="style-panel"
-      style={{
-        position: "fixed",
-        right: 12,
-        top: "50%",
-        transform: "translateY(-50%)",
-        zIndex: 50,
-        userSelect: "none",
-      }}
-    >
-      <div
-        style={{
-          ...panelStyle,
-          borderRadius: 18,
-          overflow: "hidden",
-          width: collapsed ? 40 : 240,
-          transition: "width 0.3s cubic-bezier(0.4,0,0.2,1)",
-        }}
-      >
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div
-          onClick={() => setCollapsed(c => !c)}
-          style={{
-            ...headerStyle,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            padding: "10px 12px",
-          }}
-        >
-          {!collapsed && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-              {/* Live stroke colour dot */}
-              <div style={{
-                width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
-                backgroundColor: activeStyle.strokeColor,
-                boxShadow: `0 0 0 1.5px var(--border-strong)`,
-              }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {modeLabel}
-              </span>
-              {hasSelection && (
-                <span style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  background: "var(--brand-muted)",
-                  color: "var(--brand)",
-                  borderRadius: 99,
-                  padding: "2px 6px",
-                  flexShrink: 0,
-                }}>
-                  {selectedIds.length === 1 ? selectedShape?.type : "Multi"}
-                </span>
-              )}
-            </div>
-          )}
-          <button
-            style={{
-              ...btnBase,
-              background: "transparent",
-              color: "var(--text-muted)",
-              padding: 2, borderRadius: 6,
-              flexShrink: 0,
-              marginLeft: collapsed ? 0 : "auto",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-            title={collapsed ? "Expand" : "Collapse"}
-          >
-            {collapsed ? (
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M9 18l6-6-6-6"/>
-              </svg>
-            ) : (
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6"/>
-              </svg>
-            )}
-          </button>
-        </div>
-
-        {/* ── Body ───────────────────────────────────────────────────────── */}
+    <aside className={`properties-panel${collapsed ? " is-collapsed" : ""}`}>
+      <div className="properties-panel__header">
         {!collapsed && (
-          <div style={{
-            padding: "10px 12px",
-            maxHeight: "76vh",
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
-          }}>
-
-            {/* ── Stroke Color ── */}
-            <div>
-              <SectionLabel>Stroke Color</SectionLabel>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {STROKE_COLORS.map(c => (
-                  <Swatch key={c.value} color={c.value} title={c.label}
-                    active={activeStyle.strokeColor === c.value}
-                    onClick={v => update("strokeColor", v)} />
-                ))}
-                <CustomColorPicker
-                  value={activeStyle.strokeColor}
-                  onChange={v => update("strokeColor", v)}
-                  title="Custom stroke colour"
-                />
-              </div>
-            </div>
-
-            {/* ── Fill Color ── */}
-            <div>
-              <SectionLabel>Fill Color</SectionLabel>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {FILL_COLORS.map(c => (
-                  <Swatch key={c.value} color={c.value} title={c.label}
-                    active={activeStyle.fillColor === c.value}
-                    onClick={v => update("fillColor", v)} />
-                ))}
-                <CustomColorPicker
-                  value={activeStyle.fillColor === "transparent" ? "#000000" : activeStyle.fillColor}
-                  onChange={v => update("fillColor", v)}
-                  title="Custom fill colour"
-                />
-              </div>
-            </div>
-
-            {/* ── Stroke Width ── */}
-            <div>
-              <SectionLabel>Stroke Width</SectionLabel>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
-                {STROKE_WIDTHS.map(w => {
-                  const isActive = activeStyle.strokeWidth === w;
-                  return (
-                    <button
-                      key={w}
-                      onClick={() => update("strokeWidth", w)}
-                      title={`${w}px`}
-                      style={{
-                        ...btnBase,
-                        minWidth: 28, padding: "3px 5px",
-                        borderRadius: 7,
-                        fontSize: 10, fontFamily: "monospace",
-                        background: isActive ? "var(--brand)" : "var(--surface-2)",
-                        color: isActive ? "#fff" : "var(--text-secondary)",
-                        boxShadow: isActive ? "0 1px 6px rgba(99,102,241,0.3)" : "none",
-                      }}
-                    >
-                      {w}
-                    </button>
-                  );
-                })}
-              </div>
-              <StyledRange
-                min={1} max={20} step={1}
-                value={activeStyle.strokeWidth}
-                onChange={v => update("strokeWidth", v)}
-                label={`${activeStyle.strokeWidth}px`}
-              />
-            </div>
-
-            {/* ── Line Style ── */}
-            <div>
-              <SectionLabel>Line Style</SectionLabel>
-              <SegmentedControl options={LINE_STYLES} value={activeStyle.lineStyle} onChange={v => update("lineStyle", v)} />
-            </div>
-
-            {/* ── Line Cap ── */}
-            <div>
-              <SectionLabel>Line Cap</SectionLabel>
-              <SegmentedControl options={LINE_CAPS} value={activeStyle.lineCap} onChange={v => update("lineCap", v)} />
-            </div>
-
-            {/* ── Line Join ── */}
-            <div>
-              <SectionLabel>Line Join</SectionLabel>
-              <SegmentedControl options={LINE_JOINS} value={activeStyle.lineJoin} onChange={v => update("lineJoin", v)} />
-            </div>
-
-            {/* Divider */}
-            <div style={{ height: 1, background: "var(--border)" }} />
-
-            {/* ── Opacity ── */}
-            <div>
-              <SectionLabel>Opacity</SectionLabel>
-              <StyledRange
-                min={0} max={1} step={0.01}
-                value={activeStyle.opacity}
-                onChange={v => update("opacity", v)}
-                label={`${Math.round(activeStyle.opacity * 100)}%`}
-              />
-            </div>
-
-            {/* ── Shadow ── */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                <SectionLabel>Shadow</SectionLabel>
-                <Toggle enabled={activeStyle.shadow} onChange={v => update("shadow", v)} />
-              </div>
-
-              {activeStyle.shadow && (
-                <div style={{
-                  borderRadius: 12,
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--border)",
-                  padding: "10px 10px",
-                  display: "flex", flexDirection: "column", gap: 10,
-                }}>
-                  <div>
-                    <SectionLabel>Shadow Color</SectionLabel>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {STROKE_COLORS.map(c => (
-                        <Swatch key={c.value} color={c.value} title={c.label}
-                          active={activeStyle.shadowColor === c.value}
-                          onClick={v => update("shadowColor", v)} />
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <SectionLabel>Blur</SectionLabel>
-                    <StyledRange
-                      min={0} max={50} step={1}
-                      value={activeStyle.shadowBlur}
-                      onChange={v => update("shadowBlur", v)}
-                      label={`${activeStyle.shadowBlur}px`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="properties-panel__heading">
+            <h2>Properties</h2>
+            <span>{panelLabel}</span>
           </div>
         )}
+        <button
+          type="button"
+          className="properties-panel__collapse"
+          aria-label={collapsed ? "Expand properties panel" : "Collapse properties panel"}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((previous) => !previous)}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d={collapsed ? "m7 4 6 6-6 6" : "m13 4-6 6 6 6"} />
+          </svg>
+        </button>
       </div>
-    </div>
+
+      {!collapsed && (
+        <div className="properties-panel__body">
+          {needsSelection ? (
+            <p className="properties-panel__message">
+              Select a shape to edit its appearance and style.
+            </p>
+          ) : isEraser ? (
+            <p className="properties-panel__message">
+              The eraser removes whole shapes. Choose a shape and click it to remove it.
+            </p>
+          ) : (
+            <>
+              <ColorControl
+                title="Stroke"
+                value={activeStrokeColor}
+                activeValue={activeStrokeColor}
+                colors={themeStrokeColors}
+                normalizeChange={(value) => resolveThemeStrokeColor(value, isDark)}
+                onChange={(value) => update("strokeColor", value)}
+              />
+
+              {supportsFill && (
+                <ColorControl
+                  title="Fill"
+                  value={activeStyle.fillColor}
+                  colors={FILL_COLORS}
+                  onChange={(value) => update("fillColor", value)}
+                />
+              )}
+
+              {activeTool !== "text" && (
+                <Section title="Stroke width">
+                  <div className="property-widths" role="group" aria-label="Stroke width presets">
+                    {STROKE_WIDTHS.map((width) => (
+                      <button
+                        key={width}
+                        type="button"
+                        aria-label={`${width} pixel stroke`}
+                        aria-pressed={activeStyle.strokeWidth === width}
+                        className={activeStyle.strokeWidth === width ? "is-active" : ""}
+                        onClick={() => update("strokeWidth", width)}
+                      >
+                        {width}
+                      </button>
+                    ))}
+                  </div>
+                  <RangeControl
+                    label="Stroke width"
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={activeStyle.strokeWidth}
+                    onChange={(value) => update("strokeWidth", value)}
+                    format={(value) => `${value}px`}
+                  />
+                </Section>
+              )}
+
+              {activeTool !== "text" && (
+                <Section title="Line style">
+                  <SegmentedControl
+                    label="Line style"
+                    options={LINE_STYLES}
+                    value={activeStyle.lineStyle}
+                    onChange={(value) => update("lineStyle", value)}
+                  />
+                </Section>
+              )}
+
+              {supportsLineEnds && (
+                <>
+                  <Section title="Line cap">
+                    <SegmentedControl
+                      label="Line cap"
+                      options={LINE_CAPS}
+                      value={activeStyle.lineCap}
+                      onChange={(value) => update("lineCap", value)}
+                    />
+                  </Section>
+                  <Section title="Line join">
+                    <SegmentedControl
+                      label="Line join"
+                      options={LINE_JOINS}
+                      value={activeStyle.lineJoin}
+                      onChange={(value) => update("lineJoin", value)}
+                    />
+                  </Section>
+                </>
+              )}
+
+              <Section title="Opacity">
+                <RangeControl
+                  label="Opacity"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={activeStyle.opacity}
+                  onChange={(value) => update("opacity", value)}
+                  format={(value) => `${Math.round(value * 100)}%`}
+                />
+              </Section>
+
+              <Section title="Shadow">
+                <label className="property-toggle">
+                  <span>{activeStyle.shadow ? "On" : "Off"}</span>
+                  <input
+                    type="checkbox"
+                    checked={activeStyle.shadow}
+                    onChange={(event) => update("shadow", event.target.checked)}
+                    aria-label="Enable shadow"
+                  />
+                </label>
+                {activeStyle.shadow && (
+                  <>
+                    <div className="property-color-row property-color-row--compact">
+                      {ALL_COLORS.map((color) => (
+                        <Swatch
+                          key={color.value}
+                          color={color.value}
+                          label={`Shadow ${color.label.toLowerCase()}`}
+                          active={activeStyle.shadowColor === color.value}
+                          onClick={(value) => update("shadowColor", value)}
+                        />
+                      ))}
+                    </div>
+                    <RangeControl
+                      label="Shadow blur"
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={activeStyle.shadowBlur}
+                      onChange={(value) => update("shadowBlur", value)}
+                      format={(value) => `${value}px`}
+                    />
+                  </>
+                )}
+              </Section>
+            </>
+          )}
+        </div>
+      )}
+    </aside>
   );
 }
 

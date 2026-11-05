@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { doCoordsIntersectShape, moveShape, getBoundingBox } from "./useTransform.js";
+import { resolveThemeStrokeColor } from "../utils/themeStroke.js";
 
 const pointToLineDistance = (point, lineStart, lineEnd) => {
     // 1. Calculate the squared length of the line segment
@@ -79,6 +80,11 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
     const prevPos = useRef({ x: 0, y: 0 });
     const actionMode = useRef(null);
     const generateId = () => crypto.randomUUID();
+    const getShapeOwner = () => ({
+        owner: options.ownerId || "anon",
+        createdBy: options.ownerId || "anon",
+        creatorName: options.creatorName || "Collaborator",
+    });
 
     // Coords wrt canvas + camera transform
     const getCoords = (e) => {
@@ -162,6 +168,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
         type: "pen",
         points: [{ x, y }],
         style: { ...currentStyle },
+        ...getShapeOwner(),
       };
 
       if (options?.onStrokeStart) {
@@ -395,7 +402,10 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 -camera.camera.y * camera.camera.zoom
             );
             // Apply currentStyle so the live pen preview matches the final shape
-            ctx.strokeStyle  = currentStyle?.strokeColor ?? "#ffffff";
+            ctx.strokeStyle  = resolveThemeStrokeColor(
+                currentStyle?.strokeColor ?? "#ffffff",
+                options.isDark ?? true
+            );
             ctx.lineWidth    = currentStyle?.strokeWidth  ?? 2;
             ctx.lineCap      = currentStyle?.lineCap      ?? "round";
             ctx.lineJoin     = currentStyle?.lineJoin     ?? "round";
@@ -470,6 +480,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 const newShape = {
                     ...currentStroke.current,
                     style: { ...currentStyle },
+                    ...getShapeOwner(),
                 };
                 setShapes(prev => [...prev, newShape]);
                 if (options?.onStrokeEnd) {
@@ -547,6 +558,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 width: x - startX,
                 height: y - startY,
                 style: { ...currentStyle },
+                ...getShapeOwner(),
             };
 
             setShapes(prev => [
@@ -573,6 +585,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 radiusX: dx,
                 radiusY: dy,
                 style: { ...currentStyle },
+                ...getShapeOwner(),
             };
             setShapes(prev => [
                 ...prev,
@@ -595,6 +608,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 x2: x,
                 y2: y,
                 style: { ...currentStyle },
+                ...getShapeOwner(),
             };
             setShapes(prev => [
                 ...prev,

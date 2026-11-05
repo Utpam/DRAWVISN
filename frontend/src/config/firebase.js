@@ -25,17 +25,33 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+const requiredConfigKeys = ["apiKey", "authDomain", "projectId", "appId"];
+const hasFirebaseConfig = requiredConfigKeys.every((key) => {
+  const value = firebaseConfig[key];
+  return value?.trim() && !/^your_.*_here$/i.test(value.trim());
+});
+
 // ---------------------------------------------------------------------------
 // Firebase App (singleton — safe to call initializeApp once)
 // ---------------------------------------------------------------------------
-export const app = initializeApp(firebaseConfig);
+export let app = null;
+export let auth = null;
+export let db = null;
 
-// ---------------------------------------------------------------------------
-// Firebase Auth instance
-// ---------------------------------------------------------------------------
-export const auth = getAuth(app);
+if (hasFirebaseConfig) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (error) {
+    console.error("[firebase] Firebase initialization failed:", error);
+  }
+} else {
+  console.warn(
+    "[firebase] Missing or placeholder Firebase web configuration. " +
+      "Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, " +
+      "VITE_FIREBASE_PROJECT_ID, and VITE_FIREBASE_APP_ID in frontend/.env."
+  );
+}
 
-// ---------------------------------------------------------------------------
-// Cloud Firestore instance
-// ---------------------------------------------------------------------------
-export const db = getFirestore(app);
+export const isFirebaseConfigured = hasFirebaseConfig && Boolean(auth && db);

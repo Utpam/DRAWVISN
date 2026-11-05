@@ -164,7 +164,9 @@ const useBoards = () => {
 
       setBoards((prev) =>
         prev.map((b) =>
-          b.id === boardId ? { ...b, title: title.trim() } : b
+          b.id === boardId
+            ? { ...b, title: title.trim(), updatedAt: new Date() }
+            : b
         )
       );
 

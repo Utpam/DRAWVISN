@@ -26,17 +26,16 @@ export const ShareBoard = ({ boardId, boardTitle }) => {
   };
 
   return (
-    <div className="relative">
+    <div className="share-board">
       {/* ── Share Trigger Button ── */}
       <button
         id="btn-share-board"
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1.5 rounded-lg border border-indigo-600/60 bg-indigo-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition backdrop-blur-sm"
-        title="Share this whiteboard"
+        className="share-board__trigger"
+        title={`Share ${boardTitle}`}
+        aria-label={`Share ${boardTitle}`}
       >
         <svg
-          width="13"
-          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -57,54 +56,53 @@ export const ShareBoard = ({ boardId, boardTitle }) => {
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+            className="share-board__backdrop"
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="absolute top-10 right-0 z-50 w-80 rounded-2xl border border-gray-800 bg-gray-900/95 p-4 shadow-2xl backdrop-blur-md"
+            className="share-board__dialog"
             style={{ animation: "fadeIn 0.15s ease-out" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-dialog-title"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-white">Share Whiteboard</h4>
+            <div className="share-board__dialog-header">
+              <h4 id="share-dialog-title">Share board</h4>
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-white text-xs"
+                className="share-board__close"
+                aria-label="Close share dialog"
               >
-                ✕
+                ×
               </button>
             </div>
 
-            <p className="mb-3 text-xs text-gray-400">
+            <p className="share-board__description">
               Anyone with this link can view and collaborate in real-time.
             </p>
 
             {/* URL Display & Copy */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-gray-800 bg-gray-950/80 p-1.5">
+            <div className="share-board__copy-row">
               <input
                 readOnly
                 value={shareUrl}
-                className="w-full bg-transparent px-2 text-xs text-gray-300 outline-none select-all font-mono"
+                aria-label="Share link"
+                className="share-board__url"
               />
               <button
                 id="btn-copy-share-url"
+                type="button"
                 onClick={handleCopyLink}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  copied
-                    ? "bg-emerald-600 text-white"
-                    : "bg-indigo-600 text-white hover:bg-indigo-500"
-                }`}
+                className="share-board__copy"
               >
                 {copied ? "Copied!" : "Copy"}
               </button>
             </div>
 
-            <div className="mt-4 border-t border-gray-800/80 pt-3">
-              <div className="flex items-center justify-between text-[11px] text-gray-400">
-                <span>Access Permission</span>
-                <span className="rounded bg-indigo-950 px-2 py-0.5 text-indigo-300 font-mono font-medium">
-                  Real-time Editor
-                </span>
-              </div>
+            <div className="share-board__access">
+              <span>Link access</span>
+              <span>Real-time collaboration</span>
             </div>
           </div>
         </>

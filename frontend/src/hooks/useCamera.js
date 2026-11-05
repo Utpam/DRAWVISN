@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useDrawing } from "./useDrawing";
 
 export const useCamera = () => {
    
@@ -67,8 +66,26 @@ export const useCamera = () => {
         });
     };
 
+    const zoomBy = (factor, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight) => {
+        setCamera((prev) => {
+            const nextZoom = Math.max(0.2, Math.min(5, prev.zoom * factor));
+            const centerX = viewportWidth / 2;
+            const centerY = viewportHeight / 2;
+
+            return {
+                x: prev.x + centerX / prev.zoom - centerX / nextZoom,
+                y: prev.y + centerY / prev.zoom - centerY / nextZoom,
+                zoom: nextZoom,
+            };
+        });
+    };
+
+    const resetZoom = () => setCamera({ x: 0, y: 0, zoom: 1 });
+
     return {
         camera,
+        zoomBy,
+        resetZoom,
         screenToWorld,
         worldToScreen,
         startPan,
@@ -77,4 +94,3 @@ export const useCamera = () => {
         handleZoom,
     };
 };
-

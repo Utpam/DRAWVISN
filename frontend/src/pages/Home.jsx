@@ -3,48 +3,26 @@
  *
  * Route: /dashboard (Protected)
  *
- * Displays the user's board library with full CRUD capabilities:
- *  - User profile + plan badge
- *  - Board count vs limit indicator
- *  - Search boards (client-side)
- *  - Create, open, rename, duplicate, delete boards
- *
- * All Firebase interactions go through useBoards() and useAuth().
- * No Firestore SDK code lives here.
+ * Board data and CRUD operations are managed by useBoards; this page handles
+ * the workspace controls and layout.
  */
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useFirebase";
 import { useToast } from "../components/Toast";
 import useBoards from "../hooks/useBoards";
+import BoardCard from "../components/BoardCard";
+import "./Home.css";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-const formatDate = (ts) => {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+const getTimestamp = (value) => {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-const timeAgo = (ts) => {
-  if (!ts) return "—";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (diff < 60) return "Just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-};
-
-// ---------------------------------------------------------------------------
-// DashboardPage
-// ---------------------------------------------------------------------------
 function DashboardPage() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
@@ -61,64 +39,59 @@ function DashboardPage() {
   } = useBoards();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameValue, setRenameValue] = useState("");
+  const [sortBy, setSortBy] = useState("updatedAt");
   const [actionLoading, setActionLoading] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
-  const renameInputRef = useRef(null);
 
-  // Focus rename input when it mounts
-  useEffect(() => {
-    if (renamingId && renameInputRef.current) {
-      setTimeout(() => renameInputRef.current?.focus(), 10);
-    }
-  }, [renamingId]);
-
-  // -------------------------------------------------------------------------
-  // Filtered boards (client-side search)
-  // -------------------------------------------------------------------------
   const filteredBoards = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return boards;
-    return boards.filter((b) => b.title.toLowerCase().includes(q));
-  }, [boards, searchQuery]);
+    const query = searchQuery.trim().toLowerCase();
+    const matchingBoards = query
+      ? boards.filter((board) => String(board.title || "").toLowerCase().includes(query))
+      : [...boards];
 
-  // -------------------------------------------------------------------------
-  // Board limit info
-  // -------------------------------------------------------------------------
-  const boardCount = userDoc?.boardCount ?? 0;
-  const boardLimit = userDoc?.boardLimit ?? 5;
+    return matchingBoards.sort((a, b) => {
+      if (sortBy === "title") {
+        return String(a.title || "").localeCompare(String(b.title || ""));
+      }
+      return getTimestamp(b[sortBy]) - getTimestamp(a[sortBy]);
+    });
+  }, [boards, searchQuery, sortBy]);
+
+  const boardCount = userDoc?.boardCount ?? boards.length;
+  const boardLimit = userDoc?.boardLimit ?? 10;
   const atLimit = boardCount >= boardLimit;
-  const limitPercent = Math.min((boardCount / boardLimit) * 100, 100);
+  const limitPercent = boardLimit > 0
+    ? Math.min((boardCount / boardLimit) * 100, 100)
+    : 0;
 
-  // -------------------------------------------------------------------------
-  // Handlers
-  // -------------------------------------------------------------------------
   const handleCreateBoard = async () => {
     if (atLimit) {
       toast.error("Board limit reached. Upgrade to Pro for unlimited boards.");
       return;
     }
+
     setActionLoading("new");
-    const result = await createBoard();
-    setActionLoading(null);
-    if (result?.error === "BOARD_LIMIT_REACHED") {
-      toast.error("Board limit reached. Upgrade to Pro for unlimited boards.");
-    } else if (result?.error) {
-      toast.error(result.error);
+    try {
+      const result = await createBoard();
+      if (result?.error === "BOARD_LIMIT_REACHED") {
+        toast.error("Board limit reached. Upgrade to Pro for unlimited boards.");
+      } else if (result?.error) {
+        toast.error(result.error);
+      }
+    } finally {
+      setActionLoading(null);
     }
-    // On success, useBoards navigates automatically
   };
 
   const handleDelete = async (boardId, title) => {
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     setActionLoading(boardId);
-    const result = await deleteBoard(boardId);
-    setActionLoading(null);
-    if (result?.error) {
-      toast.error(result.error);
-    } else {
-      toast.success(`"${title}" deleted.`);
+    try {
+      const result = await deleteBoard(boardId);
+      if (result?.error) toast.error(result.error);
+      else toast.success(`"${title}" deleted.`);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -127,32 +100,29 @@ function DashboardPage() {
       toast.error("Board limit reached. Delete a board or upgrade to duplicate.");
       return;
     }
+
     setActionLoading(boardId);
-    const result = await duplicateBoard(boardId);
-    setActionLoading(null);
-    if (result?.error === "BOARD_LIMIT_REACHED") {
-      toast.error("Board limit reached. Delete a board or upgrade to duplicate.");
-    } else if (result?.error) {
-      toast.error(result.error);
-    } else {
-      toast.success(`"${title}" duplicated.`);
+    try {
+      const result = await duplicateBoard(boardId);
+      if (result?.error === "BOARD_LIMIT_REACHED") {
+        toast.error("Board limit reached. Delete a board or upgrade to duplicate.");
+      } else if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`"${title}" duplicated.`);
+      }
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const startRename = (board) => {
-    setRenamingId(board.id);
-    setRenameValue(board.title);
-  };
-
-  const commitRename = async (boardId) => {
-    const trimmed = renameValue.trim();
-    setRenamingId(null);
-    if (!trimmed) return;
+  const handleRename = async (boardId, title) => {
     setActionLoading(boardId);
-    const result = await renameBoard(boardId, trimmed);
-    setActionLoading(null);
-    if (result?.error) {
-      toast.error(result.error);
+    try {
+      const result = await renameBoard(boardId, title);
+      if (result?.error) toast.error(result.error);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -161,294 +131,221 @@ function DashboardPage() {
     try {
       await logout();
       navigate("/");
-    } catch (err) {
+    } catch {
       toast.error("Sign-out failed. Please try again.");
       setSigningOut(false);
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
+  const displayName = user?.displayName || user?.email || "Account";
+  const initials = displayName.trim().charAt(0).toUpperCase() || "A";
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* ------------------------------------------------------------------
-          Header
-      ------------------------------------------------------------------ */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-gray-950/90 backdrop-blur-md px-8 py-4">
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
-            <span className="text-white font-black text-sm">D</span>
-          </div>
-          <span className="text-xl font-bold tracking-tight">DRAVISN</span>
-        </div>
+    <div className="dashboard-page">
+      <header className="dashboard-header">
+        <div className="dashboard-header__inner">
+          <Link className="dashboard-brand" to="/dashboard" aria-label="DRAVISN workspace">
+            <span className="dashboard-brand__mark" aria-hidden="true">D</span>
+            <span>DRAVISN</span>
+          </Link>
 
-        {/* User info + sign out */}
-        <div className="flex items-center gap-4">
-          {/* Plan badge */}
-          {userDoc?.plan && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 capitalize">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              {userDoc.plan}
-            </span>
-          )}
-
-          {/* Avatar + name */}
-          <div className="flex items-center gap-2.5">
-            {user?.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt={user.displayName ?? "User"}
-                className="h-8 w-8 rounded-full border border-white/10 object-cover"
-              />
-            ) : (
-              <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold">
-                {(user?.displayName ?? user?.email ?? "U")[0].toUpperCase()}
+          <details className="account-menu">
+            <summary className="account-menu__trigger" aria-label="Open account menu">
+              {user?.photoURL ? (
+                <img className="account-menu__avatar" src={user.photoURL} alt="" />
+              ) : (
+                <span className="account-menu__avatar account-menu__avatar--initials">
+                  {initials}
+                </span>
+              )}
+              <span className="account-menu__identity">
+                <span className="account-menu__name">{displayName}</span>
+                <span className="account-menu__plan">{userDoc?.plan || "Free"} plan</span>
+              </span>
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="account-menu__chevron">
+                <path d="m4 6 4 4 4-4" />
+              </svg>
+            </summary>
+            <div className="account-menu__popover">
+              <div className="account-menu__details">
+                <span className="account-menu__details-name">{displayName}</span>
+                {user?.email && <span className="account-menu__email">{user.email}</span>}
+                <span className="account-menu__plan-detail">
+                  {userDoc?.plan || "Free"} plan · {boardCount} of {boardLimit} boards
+                </span>
               </div>
-            )}
-            <span className="hidden sm:block text-sm text-gray-300 max-w-[160px] truncate">
-              {user?.displayName ?? user?.email}
-            </span>
-          </div>
-
-          <button
-            id="btn-sign-out"
-            onClick={handleLogout}
-            disabled={signingOut}
-            className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:border-gray-500 hover:text-white transition disabled:opacity-50"
-          >
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
+              <button
+                id="btn-sign-out"
+                className="account-menu__signout"
+                type="button"
+                onClick={handleLogout}
+                disabled={signingOut}
+              >
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </details>
         </div>
       </header>
 
-      {/* ------------------------------------------------------------------
-          Main content
-      ------------------------------------------------------------------ */}
-      <main className="mx-auto max-w-6xl px-6 py-10">
-
-        {/* Top bar: title + create button */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+      <main className="dashboard-main">
+        <section className="workspace-heading" aria-labelledby="workspace-title">
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">My Boards</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {loading
-                ? "Loading…"
-                : `${boardCount} / ${boardLimit} boards used`}
+            <p className="workspace-eyebrow">WORKSPACE</p>
+            <h1 id="workspace-title">My boards</h1>
+            <p className="workspace-description">
+              Your ideas, all in one place.
             </p>
           </div>
-
           <button
             id="btn-create-board"
+            className="create-board-button"
+            type="button"
             onClick={handleCreateBoard}
-            disabled={actionLoading === "new" || atLimit}
+            disabled={actionLoading === "new" || atLimit || loading}
             title={atLimit ? "Board limit reached" : "Create a new board"}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-indigo-500/20"
           >
             {actionLoading === "new" ? (
               <>
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                <span className="button-spinner" aria-hidden="true" />
                 Creating…
               </>
             ) : (
-              <>+ New Board</>
+              <>
+                <svg aria-hidden="true" viewBox="0 0 20 20">
+                  <path d="M10 4v12M4 10h12" />
+                </svg>
+                New board
+              </>
             )}
           </button>
-        </div>
+        </section>
 
-        {/* Board limit progress bar */}
-        <div className="mb-8 rounded-xl border border-white/5 bg-gray-900/50 px-5 py-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500">Storage</span>
-            <span className={`text-xs font-medium ${atLimit ? "text-red-400" : "text-gray-400"}`}>
-              {boardCount} / {boardLimit} boards
-            </span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                atLimit ? "bg-red-500" : limitPercent > 75 ? "bg-yellow-500" : "bg-indigo-500"
-              }`}
-              style={{ width: `${limitPercent}%` }}
+        <section className="board-tools" aria-label="Board controls">
+          <label className="board-search">
+            <svg aria-hidden="true" viewBox="0 0 20 20">
+              <circle cx="8.75" cy="8.75" r="5.75" />
+              <path d="m13 13 4 4" />
+            </svg>
+            <input
+              id="board-search"
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search boards"
+              aria-label="Search boards"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                className="board-search__clear"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </label>
+
+          <label className="board-sort">
+            <span>Sort by</span>
+            <select
+              id="board-sort"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+              aria-label="Sort boards"
+            >
+              <option value="updatedAt">Recently edited</option>
+              <option value="createdAt">Recently created</option>
+              <option value="title">Name</option>
+            </select>
+            <svg aria-hidden="true" viewBox="0 0 16 16">
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </label>
+        </section>
+
+        <section className="board-library" aria-label="Your boards">
+          <div className="board-library__heading">
+            <h2>All boards</h2>
+            <span>{loading ? "Loading…" : `${boards.length} ${boards.length === 1 ? "board" : "boards"}`}</span>
           </div>
-          {atLimit && (
-            <p className="mt-2 text-xs text-red-400">
-              Board limit reached. Delete a board to create more.
-            </p>
-          )}
-        </div>
 
-        {/* Search */}
-        <div className="mb-6 relative">
-          <svg
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            id="board-search"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search boards…"
-            className="w-full rounded-xl border border-white/5 bg-gray-900/50 pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500/50 focus:bg-gray-900 transition"
-          />
-        </div>
-
-        {/* Error state */}
-        {error && (
-          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {loading && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-44 rounded-2xl border border-white/5 bg-gray-900/50 animate-pulse"
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && !error && filteredBoards.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-gray-800 py-28 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-800/60 text-2xl">
-              🎨
+          {error && (
+            <div className="dashboard-error" role="alert">
+              <span>{error}</span>
             </div>
-            {searchQuery ? (
-              <>
-                <p className="text-gray-400 font-medium">No boards match "{searchQuery}"</p>
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="text-sm text-indigo-400 hover:text-indigo-300 transition"
-                >
+          )}
+
+          {loading && (
+            <div className="board-grid" aria-label="Loading boards">
+              {[1, 2, 3].map((item) => (
+                <div className="board-card-skeleton" key={item} />
+              ))}
+            </div>
+          )}
+
+          {!loading && !error && filteredBoards.length === 0 && (
+            <div className="board-empty">
+              <h3>{searchQuery ? "No boards found" : "No boards yet"}</h3>
+              <p>
+                {searchQuery
+                  ? `No boards match “${searchQuery}”. Try another search.`
+                  : "Create a board to start collecting your ideas."}
+              </p>
+              {searchQuery ? (
+                <button type="button" className="text-button" onClick={() => setSearchQuery("")}>
                   Clear search
                 </button>
-              </>
-            ) : (
-              <>
-                <p className="text-gray-400 font-medium">No boards yet.</p>
+              ) : (
                 <button
+                  type="button"
+                  className="text-button"
                   onClick={handleCreateBoard}
-                  className="text-sm text-indigo-400 hover:text-indigo-300 transition"
+                  disabled={actionLoading === "new" || atLimit}
                 >
-                  Create your first board →
+                  Create your first board
                 </button>
-              </>
-            )}
+              )}
+            </div>
+          )}
+
+          {!loading && filteredBoards.length > 0 && (
+            <div className="board-grid">
+              {filteredBoards.map((board) => (
+                <BoardCard
+                  key={board.id}
+                  board={board}
+                  busy={actionLoading === board.id}
+                  onOpen={() => navigate(`/dashboard/${board.id}`)}
+                  onRename={(title) => handleRename(board.id, title)}
+                  onDuplicate={() => handleDuplicate(board.id, board.title)}
+                  onDelete={() => handleDelete(board.id, board.title)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="usage-summary" aria-label="Board usage">
+          <div className="usage-summary__copy">
+            <span className="usage-summary__label">Board usage</span>
+            <span className="usage-summary__count">
+              {boardCount} <span>of {boardLimit} boards</span>
+            </span>
           </div>
-        )}
-
-        {/* Board grid */}
-        {!loading && filteredBoards.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredBoards.map((board) => (
-              <div
-                key={board.id}
-                className="group relative flex flex-col rounded-2xl border border-white/5 bg-gray-900/70 p-5 transition-all duration-200 hover:border-indigo-500/30 hover:bg-gray-900 hover:shadow-xl hover:shadow-black/30"
-              >
-                {/* Board thumbnail / preview area */}
-                <div className="mb-4 h-24 w-full rounded-xl bg-gray-800/60 border border-white/5 flex items-center justify-center overflow-hidden">
-                  <div className="grid grid-cols-3 gap-1 p-3 w-full opacity-40">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-2 rounded-full bg-indigo-400"
-                        style={{ width: `${40 + (i * 13) % 50}%` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Title — inline rename */}
-                {renamingId === board.id ? (
-                  <input
-                    ref={renameInputRef}
-                    id={`rename-input-${board.id}`}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onBlur={() => commitRename(board.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitRename(board.id);
-                      if (e.key === "Escape") setRenamingId(null);
-                    }}
-                    className="mb-1 w-full rounded-lg bg-gray-800 px-2.5 py-1.5 text-sm font-semibold text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                ) : (
-                  <h3
-                    className="mb-1 truncate text-sm font-semibold text-white cursor-pointer hover:text-indigo-300 transition"
-                    onDoubleClick={() => startRename(board)}
-                    title="Double-click to rename"
-                  >
-                    {board.title}
-                  </h3>
-                )}
-
-                {/* Metadata */}
-                <div className="flex items-center justify-between text-xs text-gray-600 mb-4">
-                  <span>Edited {timeAgo(board.updatedAt)}</span>
-                  <span>Created {formatDate(board.createdAt)}</span>
-                </div>
-
-                {/* Actions */}
-                <div className="mt-auto flex gap-2">
-                  <button
-                    id={`btn-open-${board.id}`}
-                    onClick={() => navigate(`/dashboard/${board.id}`)}
-                    disabled={actionLoading === board.id}
-                    className="flex-1 rounded-lg bg-indigo-600 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition disabled:opacity-50"
-                  >
-                    Open
-                  </button>
-                  <button
-                    id={`btn-duplicate-${board.id}`}
-                    onClick={() => handleDuplicate(board.id, board.title)}
-                    disabled={actionLoading === board.id}
-                    title="Duplicate board"
-                    className="rounded-lg border border-gray-700 px-2.5 py-1.5 text-xs text-gray-400 hover:border-gray-500 hover:text-white transition disabled:opacity-50"
-                  >
-                    Copy
-                  </button>
-                  <button
-                    id={`btn-rename-${board.id}`}
-                    onClick={() => startRename(board)}
-                    disabled={actionLoading === board.id}
-                    title="Rename board"
-                    className="rounded-lg border border-gray-700 px-2.5 py-1.5 text-xs text-gray-400 hover:border-gray-500 hover:text-white transition disabled:opacity-50"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    id={`btn-delete-${board.id}`}
-                    onClick={() => handleDelete(board.id, board.title)}
-                    disabled={actionLoading === board.id}
-                    title="Delete board"
-                    className="rounded-lg border border-red-900/60 px-2.5 py-1.5 text-xs text-red-500 hover:border-red-500 hover:text-red-300 transition disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Per-card loading overlay */}
-                {actionLoading === board.id && (
-                  <div className="absolute inset-0 rounded-2xl bg-gray-900/70 flex items-center justify-center">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-600 border-t-indigo-500" />
-                  </div>
-                )}
-              </div>
-            ))}
+          <div
+            className="usage-summary__track"
+            role="progressbar"
+            aria-label="Board limit usage"
+            aria-valuemin={0}
+            aria-valuemax={boardLimit}
+            aria-valuenow={Math.min(boardCount, boardLimit)}
+          >
+            <span style={{ width: `${limitPercent}%` }} />
           </div>
-        )}
+          <span className="usage-summary__plan">{userDoc?.plan || "Free"} plan</span>
+        </section>
       </main>
     </div>
   );

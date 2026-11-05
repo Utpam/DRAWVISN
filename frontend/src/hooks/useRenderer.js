@@ -1,7 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { getBoundingBox } from "./useTransform.js";
 import { applyStyle } from "../utils/applyStyle.js";
 import { DEFAULT_STYLE } from "../styles/defaultStyle.js";
+import { resolveThemeStrokeColor } from "../utils/themeStroke.js";
+
+const getThemeStyle = (style, isDark) => {
+    const resolvedStyle = { ...DEFAULT_STYLE, ...style };
+    return {
+        ...resolvedStyle,
+        strokeColor: resolveThemeStrokeColor(resolvedStyle.strokeColor, isDark),
+    };
+};
 
 export const useRenderer = (
     canvasRef,
@@ -9,7 +18,9 @@ export const useRenderer = (
     camera = { x: 0, y: 0, zoom: 1 },
     selectedIds = [],
     remoteStrokes = {},
-    remoteSelections = {}
+    remoteSelections = {},
+    renderKey,
+    isDark = true
 ) => {
 
     // -------------------------------------------------------------------------
@@ -23,7 +34,7 @@ export const useRenderer = (
     // selectBox and eraser keep hardcoded styles — they are internal tools,
     // not user-styleable shapes.
     // -------------------------------------------------------------------------
-    const renderers = {
+    const renderers = useMemo(() => ({
 
         // ── Selection box preview (not a user shape) ──────────────────────────
         selectBox: (ctx, shape) => {
@@ -46,7 +57,7 @@ export const useRenderer = (
 
         // ── Rectangle ─────────────────────────────────────────────────────────
         rect: (ctx, shape) => {
-            const s = { ...DEFAULT_STYLE, ...shape.style };
+            const s = getThemeStyle(shape.style, isDark);
             ctx.save();
             applyStyle(ctx, s);
             if (s.fillColor !== "transparent") {
@@ -61,7 +72,7 @@ export const useRenderer = (
             if (!shape || !shape.points || shape.points.length < 2) return;
 
             ctx.save();
-            applyStyle(ctx, shape.style ?? DEFAULT_STYLE);
+            applyStyle(ctx, getThemeStyle(shape.style, isDark));
 
             const points = shape.points;
             ctx.beginPath();
@@ -82,14 +93,11 @@ export const useRenderer = (
         },
 
         // ── Eraser (internal — renders nothing; eraser acts by filtering shapes) ──
-        eraser: (_ctx, _shape) => {
-            // Eraser strokes are never stored as permanent shapes.
-            // This renderer is kept as a no-op for type safety.
-        },
+        eraser: () => {},
 
         // ── Circle / ellipse ──────────────────────────────────────────────────
         circle: (ctx, shape) => {
-            const s = { ...DEFAULT_STYLE, ...shape.style };
+            const s = getThemeStyle(shape.style, isDark);
             ctx.save();
             applyStyle(ctx, s);
             ctx.beginPath();
@@ -105,7 +113,7 @@ export const useRenderer = (
         // ── Straight line ─────────────────────────────────────────────────────
         line: (ctx, shape) => {
             ctx.save();
-            applyStyle(ctx, shape.style ?? DEFAULT_STYLE);
+            applyStyle(ctx, getThemeStyle(shape.style, isDark));
             ctx.beginPath();
             ctx.moveTo(shape.x1, shape.y1);
             ctx.lineTo(shape.x2, shape.y2);
@@ -117,7 +125,7 @@ export const useRenderer = (
         // strokeColor drives text colour (same convention as Excalidraw).
         // fillColor is not applicable to text shapes.
         text: (ctx, shape) => {
-            const s = { ...DEFAULT_STYLE, ...shape.style };
+            const s = getThemeStyle(shape.style, isDark);
             ctx.save();
             ctx.globalAlpha   = s.opacity;
             ctx.font          = "16px Arial";
@@ -128,7 +136,7 @@ export const useRenderer = (
             ctx.fillText(shape.text, shape.x, shape.y);
             ctx.restore();
         },
-    };
+    }), [isDark]);
 
     // -------------------------------------------------------------------------
     // Main render effect — reruns whenever shapes, camera, or selection changes
@@ -203,7 +211,7 @@ export const useRenderer = (
 
         // 4. Draw remote collaborator selections with subtle colored dashes
         if (remoteSelections && Object.keys(remoteSelections).length > 0) {
-            Object.entries(remoteSelections).forEach(([socketId, selData]) => {
+            Object.values(remoteSelections).forEach((selData) => {
                 if (!selData || !selData.selectedIds) return;
                 shapes.forEach(shape => {
                     if (selData.selectedIds.includes(shape.id)) {
@@ -222,7 +230,7 @@ export const useRenderer = (
 
         // Reset transform
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }, [shapes, camera, selectedIds, remoteStrokes, remoteSelections]);
+    }, [canvasRef, shapes, camera, selectedIds, remoteStrokes, remoteSelections, renderers, renderKey]);
 
     return { renderers };
 };

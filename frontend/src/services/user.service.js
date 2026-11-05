@@ -32,7 +32,7 @@ import { db } from "../config/firebase";
 // ---------------------------------------------------------------------------
 const USERS_COLLECTION = "users";
 const DEFAULT_PLAN = "free";
-const DEFAULT_BOARD_LIMIT = 5;
+const DEFAULT_BOARD_LIMIT = 10;
 
 // ---------------------------------------------------------------------------
 // createUserDocument — Upsert user profile on login

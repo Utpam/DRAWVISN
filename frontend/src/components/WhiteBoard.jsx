@@ -10,26 +10,40 @@
  *  - Style panel & Toolbar
  */
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import { useCanvas } from "../hooks/useCanvas.js";
 import { Toolbar } from "./ToolBar.jsx";
 import StylePanel from "./StylePanel.jsx";
+import { resolveThemeStrokeColor } from "../utils/themeStroke.js";
 import { useTheme } from "../hooks/useTheme.js";
 import { useCollaboration } from "../hooks/useCollaboration.js";
 import CursorOverlay from "./CursorOverlay.jsx";
 import Collaborators from "./Collaborators.jsx";
 import ShareBoard from "./ShareBoard.jsx";
+import "./WhiteBoard.css";
 
 function WhiteBoard({
   onShapesChange,
   initialShapes = [],
   boardId,
   boardTitle = "Whiteboard",
+  onRenameBoard,
   user,
   role = "editor",
 }) {
   const inputRef = useRef(null);
-  const { isDark, toggleTheme } = useTheme();
+  const titleInputRef = useRef(null);
+  const skipTitleBlurRef = useRef(false);
+  const canvasHostRef = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  const [titleDraft, setTitleDraft] = useState(boardTitle);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const { theme, setTheme, isDark } = useTheme();
+  const previousIsDarkRef = useRef(null);
 
   // ── Collaboration Layer ──────────────────────────────────────────────────
   const {
@@ -80,6 +94,8 @@ function WhiteBoard({
     updatePan,
     stopPan,
     handleZoom,
+    zoomBy,
+    resetZoom,
     generateId,
     setTextInput,
     textInput,
@@ -98,7 +114,72 @@ function WhiteBoard({
     onSelectionUpdate: (selIds) => sendSelectionUpdate(selIds),
     remoteStrokes,
     remoteSelections,
+    canvasSize,
+    isDark,
+    ownerId: user?.uid,
+    creatorName: user?.displayName || user?.email?.split("@")[0] || "Collaborator",
   });
+
+  useEffect(() => {
+    if (previousIsDarkRef.current === null) {
+      setCurrentStyle((previous) => (
+        previous.strokeColor === "#ffffff" || previous.strokeColor === "#000000"
+          ? { ...previous, strokeColor: isDark ? "#ffffff" : "#000000" }
+          : previous
+      ));
+      previousIsDarkRef.current = isDark;
+      return;
+    }
+
+    const previousDefaultColor = previousIsDarkRef.current ? "#ffffff" : "#000000";
+    const nextDefaultColor = isDark ? "#ffffff" : "#000000";
+
+    if (previousDefaultColor !== nextDefaultColor) {
+      setCurrentStyle((previous) => (
+        previous.strokeColor === previousDefaultColor
+          ? { ...previous, strokeColor: nextDefaultColor }
+          : previous
+      ));
+      previousIsDarkRef.current = isDark;
+    }
+  }, [isDark, setCurrentStyle]);
+
+  useEffect(() => {
+    const host = canvasHostRef.current;
+    if (!host) return undefined;
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setCanvasSize({
+        width: Math.round(width),
+        height: Math.round(height),
+      });
+    });
+    resizeObserver.observe(host);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setTitleDraft(boardTitle);
+  }, [boardTitle]);
+
+  useEffect(() => {
+    if (editingTitle) titleInputRef.current?.focus();
+  }, [editingTitle]);
+
+  const commitTitle = async () => {
+    if (skipTitleBlurRef.current) {
+      skipTitleBlurRef.current = false;
+      return;
+    }
+    const nextTitle = titleDraft.trim();
+    setEditingTitle(false);
+    if (!nextTitle || nextTitle === boardTitle) {
+      setTitleDraft(boardTitle);
+      return;
+    }
+    const saved = await onRenameBoard?.(nextTitle);
+    if (!saved) setTitleDraft(boardTitle);
+  };
 
   // ── Load initial shapes from Firestore once on mount ─────────────────────
   useEffect(() => {
@@ -133,6 +214,7 @@ function WhiteBoard({
       y: textInput.y,
       text: textInput.value,
       style: { ...currentStyle },
+      owner: user?.uid || "anon",
       createdBy: user?.uid || "anon",
       creatorName: user?.displayName || "Collaborator",
       createdAt: Date.now(),
@@ -168,6 +250,7 @@ function WhiteBoard({
               const clone = JSON.parse(JSON.stringify(s));
               clone.id = generateId();
               clone.createdBy = user?.uid || "anon";
+              clone.owner = user?.uid || "anon";
               clone.creatorName = user?.displayName || "Collaborator";
               clone.createdAt = Date.now();
               clone.updatedAt = Date.now();
@@ -217,11 +300,81 @@ function WhiteBoard({
   };
 
   const zoomPercent = Math.round(camera.zoom * 100);
+  const gridSize = 24 * camera.zoom;
+  const gridPositionX = -camera.x * camera.zoom;
+  const gridPositionY = -camera.y * camera.zoom;
 
   return (
-    <>
+    <div className="whiteboard-shell">
+      <header className="whiteboard-header">
+        <div className="whiteboard-header__left">
+          <Link
+            to="/dashboard"
+            id="btn-back-to-dashboard"
+            className="whiteboard-back"
+            aria-label="Back to dashboard"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M12.5 4.5 7 10l5.5 5.5M7 10h10" />
+            </svg>
+            <span>Dashboard</span>
+          </Link>
+          <span className="whiteboard-header__divider" />
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              className="whiteboard-title-input"
+              value={titleDraft}
+              maxLength={100}
+              aria-label="Board title"
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                } else if (event.key === "Escape") {
+                  skipTitleBlurRef.current = true;
+                  setTitleDraft(boardTitle);
+                  setEditingTitle(false);
+                }
+              }}
+            />
+          ) : (
+            <button
+              className="whiteboard-title"
+              type="button"
+              title="Rename board"
+              onClick={() => setEditingTitle(true)}
+            >
+              <span>{boardTitle}</span>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="m10.5 3.5 2 2M3 13l3.6-.7 6.7-6.7a1.4 1.4 0 0 0-2-2l-6.7 6.7L3 13Z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <div className="whiteboard-header__right">
+          <Collaborators
+            collaborators={collaborators}
+            currentUser={user}
+            connectionStatus={connectionStatus}
+          />
+          <ShareBoard boardId={boardId} boardTitle={boardTitle} />
+        </div>
+      </header>
+
       {/* ── Canvas container ───────────────────────────────────────────────── */}
-      <div className="canvas-bg relative w-full overflow-hidden" style={{ height: "100dvh" }}>
+      <div
+        ref={canvasHostRef}
+        className="canvas-bg whiteboard-canvas relative w-full overflow-hidden"
+        style={{
+          height: "100dvh",
+          backgroundSize: `${gridSize}px ${gridSize}px`,
+          backgroundPosition: `${gridPositionX}px ${gridPositionY}px`,
+        }}
+      >
         {/* ── Remote Live Cursors ── */}
         <CursorOverlay
           remoteCursors={remoteCursors}
@@ -230,9 +383,9 @@ function WhiteBoard({
 
         <canvas
           ref={canvasRef}
-          width={window.innerWidth}
-          height={window.innerHeight}
-          style={{ display: "block", position: "absolute", inset: 0 }}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          className="whiteboard-drawing-canvas"
           onMouseDown={(e) => {
             if (e.button === 1) {
               e.preventDefault();
@@ -253,16 +406,6 @@ function WhiteBoard({
           }}
           onWheel={handleZoom}
         />
-
-        {/* ── Top-Right Collaboration Bar (Share & Presence) ────────────────── */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
-          <Collaborators
-            collaborators={collaborators}
-            currentUser={user}
-            connectionStatus={connectionStatus}
-          />
-          <ShareBoard boardId={boardId} boardTitle={boardTitle} />
-        </div>
 
         {/* ── Floating text input overlay ──────────────────────────────────── */}
         {textInput && (
@@ -290,7 +433,7 @@ function WhiteBoard({
                 padding: 0,
                 margin: 0,
                 background: "transparent",
-                color: currentStyle?.strokeColor ?? "#ffffff",
+                color: resolveThemeStrokeColor(currentStyle?.strokeColor ?? "#ffffff", isDark),
                 outline: "none",
                 border: "none",
               }}
@@ -298,172 +441,64 @@ function WhiteBoard({
           </form>
         )}
 
-        {/* ── Bottom-center toolbar pill ───────────────────────────────────── */}
-        <div
-          className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40"
-          style={{
-            background: "var(--toolbar-bg)",
-            border: "1px solid var(--toolbar-border)",
-            borderRadius: "16px",
-            padding: "6px 10px",
-            boxShadow: "var(--shadow-lg)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            display: "flex",
-            alignItems: "center",
-            gap: "2px",
-          }}
-        >
-          <Toolbar setTool={setTool} tool={tool} isDark={isDark} />
-
-          {/* Divider */}
-          <div
-            style={{
-              width: 1,
-              height: 24,
-              background: "var(--border-strong)",
-              margin: "0 6px",
-              flexShrink: 0,
-            }}
-          />
-
-          {/* Clear button */}
+        <div className="whiteboard-toolbar">
+          <Toolbar setTool={setTool} tool={tool} />
+          <span className="whiteboard-toolbar__divider" />
           <button
             id="btn-clear-canvas"
+            className="whiteboard-icon-button whiteboard-icon-button--clear"
+            type="button"
             onClick={clearCanvas}
             title="Clear canvas"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "transparent",
-              color: "var(--text-secondary)",
-              border: "none",
-              cursor: "pointer",
-              transition: "background 0.15s, color 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(239,68,68,0.12)";
-              e.currentTarget.style.color = "#ef4444";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "var(--text-secondary)";
-            }}
+            aria-label="Clear canvas"
           >
-            <svg
-              width="15"
-              height="15"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4h6v2" />
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" />
             </svg>
           </button>
         </div>
 
-        {/* ── Bottom-left: zoom indicator ──────────────────────────────────── */}
-        <div
-          className="absolute bottom-5 left-4 z-40 flex items-center gap-1.5"
-          style={{
-            background: "var(--toolbar-bg)",
-            border: "1px solid var(--toolbar-border)",
-            borderRadius: 10,
-            padding: "5px 10px",
-            boxShadow: "var(--shadow-lg)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            color: "var(--text-secondary)",
-            fontSize: 11,
-            fontWeight: 600,
-            fontVariantNumeric: "tabular-nums",
-            minWidth: 60,
-          }}
-        >
-          <svg
-            width="11"
-            height="11"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-            opacity={0.6}
+        <div className="whiteboard-zoom-controls" role="group" aria-label="Canvas zoom">
+          <button
+            type="button"
+            onClick={() => zoomBy(1 / 1.2, canvasSize.width, canvasSize.height)}
+            aria-label="Zoom out"
+            title="Zoom out"
           >
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-            <path d="M11 8v6M8 11h6" />
-          </svg>
-          <span className="remove-input-arrow" style={{ minWidth: 28, textAlign: "center" }}>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12" /></svg>
+          </button>
+          <button
+            type="button"
+            className="whiteboard-zoom-controls__value"
+            onClick={resetZoom}
+            aria-label={`Zoom ${zoomPercent} percent. Reset zoom`}
+            title="Reset zoom"
+          >
             {zoomPercent}%
-          </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomBy(1.2, canvasSize.width, canvasSize.height)}
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12m-6-6h12" /></svg>
+          </button>
         </div>
 
-        {/* ── Bottom-right: theme toggle ───────────────────────────────────── */}
-        <button
-          id="btn-toggle-theme"
-          onClick={toggleTheme}
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          className="absolute bottom-5 right-4 z-40 flex items-center gap-2"
-          style={{
-            background: "var(--toolbar-bg)",
-            border: "1px solid var(--toolbar-border)",
-            borderRadius: 10,
-            padding: "7px 12px",
-            boxShadow: "var(--shadow-lg)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            cursor: "pointer",
-            color: "var(--text-secondary)",
-            fontSize: 11,
-            fontWeight: 600,
-            transition: "color 0.15s, background 0.15s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-        >
-          {isDark ? (
-            <svg
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          ) : (
-            <svg
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              viewBox="0 0 24 24"
-            >
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
-          <span>{isDark ? "Light" : "Dark"}</span>
-        </button>
+        <label className="whiteboard-theme-control">
+          <span>Theme</span>
+          <select
+            id="btn-toggle-theme"
+            value={theme}
+            onChange={(event) => setTheme(event.target.value)}
+            aria-label={`Theme: ${theme}`}
+          >
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="system">System</option>
+          </select>
+        </label>
       </div>
 
       {/* ── Style Panel (fixed, right edge) ──────────────────────────────── */}
@@ -473,9 +508,10 @@ function WhiteBoard({
         selectedIds={selectedIds}
         shapes={shapes}
         setShapes={setShapes}
+        tool={tool}
         isDark={isDark}
       />
-    </>
+    </div>
   );
 }
 

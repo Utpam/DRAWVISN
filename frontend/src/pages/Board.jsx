@@ -12,11 +12,12 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useFirebase";
-import { getBoard } from "../services/board.service";
+import { getBoard, renameBoard } from "../services/board.service";
 import useAutosave from "../hooks/useAutosave";
 import WhiteBoard from "../components/WhiteBoard";
+import { useToast } from "../components/Toast";
 
 // ---------------------------------------------------------------------------
 // Loading Screen
@@ -57,6 +58,7 @@ function BoardNotFoundScreen() {
 function BoardPage() {
   const { boardId } = useParams();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const [board, setBoard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -119,35 +121,30 @@ function BoardPage() {
     setLiveShapes(shapes);
   }, []);
 
+  const handleRenameBoard = useCallback(async (title) => {
+    try {
+      await renameBoard(boardId, title);
+      setBoard((current) => current ? { ...current, title } : current);
+      return true;
+    } catch (error) {
+      console.error("[BoardPage] rename error:", error);
+      toast.error("Could not rename this board. Please try again.");
+      return false;
+    }
+  }, [boardId, toast]);
+
   if (loading) return <BoardLoadingScreen />;
   if (notFound) return <BoardNotFoundScreen />;
   if (!board) return null;
 
   return (
-    <div className="w-full h-screen items-center justify-center relative">
-      {/* ── Top-Left: Navigation & Board Title ── */}
-      <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
-        <Link
-          to="/dashboard"
-          id="btn-back-to-dashboard"
-          className="flex items-center gap-1.5 rounded-lg border border-gray-700/80 bg-gray-900/80 backdrop-blur-sm px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition"
-        >
-          ← Dashboard
-        </Link>
-        <span
-          className="rounded-lg border border-gray-700/60 bg-gray-900/70 backdrop-blur-sm px-3 py-1.5 text-xs text-gray-300 max-w-[180px] truncate font-medium"
-          title={board.title}
-        >
-          {board.title}
-        </span>
-      </div>
-
-      {/* ── WhiteBoard Canvas & Collaboration ── */}
+    <div className="w-full h-screen relative">
       <WhiteBoard
         initialShapes={board.shapes ?? []}
         onShapesChange={handleShapesChange}
         boardId={board.id}
         boardTitle={board.title}
+        onRenameBoard={handleRenameBoard}
         user={user}
         role={userRole}
       />

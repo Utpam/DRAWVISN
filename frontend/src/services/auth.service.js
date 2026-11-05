@@ -28,6 +28,14 @@ const googleProvider = new GoogleAuthProvider();
  */
 export const signInWithGoogle = async () => {
   try {
+    if (!auth) {
+      const error = new Error(
+        "Firebase is not configured. Add the required VITE_FIREBASE_* values to frontend/.env."
+      );
+      error.code = "firebase/not-configured";
+      throw error;
+    }
+
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
@@ -45,6 +53,14 @@ export const signInWithGoogle = async () => {
  */
 export const signOutUser = async () => {
   try {
+    if (!auth) {
+      const error = new Error(
+        "Firebase is not configured. Add the required VITE_FIREBASE_* values to frontend/.env."
+      );
+      error.code = "firebase/not-configured";
+      throw error;
+    }
+
     await signOut(auth);
   } catch (error) {
     console.error("[auth.service] signOutUser error:", error.code, error.message);
@@ -59,7 +75,7 @@ export const signOutUser = async () => {
  * @returns {import("firebase/auth").User | null}
  */
 export const getCurrentUser = () => {
-  return auth.currentUser;
+  return auth?.currentUser ?? null;
 };
 
 /**
@@ -70,5 +86,10 @@ export const getCurrentUser = () => {
  * @returns {() => void} Unsubscribe function — call on cleanup.
  */
 export const onAuthChange = (callback) => {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
+
   return onAuthStateChanged(auth, callback);
 };

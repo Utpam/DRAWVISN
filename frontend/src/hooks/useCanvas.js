@@ -15,7 +15,9 @@ export const useCanvas = (options = {}) => {
     camera.camera,
     state.selectedIds,
     options.remoteStrokes || {},
-    options.remoteSelections || {}
+    options.remoteSelections || {},
+    options.canvasSize,
+    options.isDark
   );
   const drawing = useDrawing(canvasRef, state, camera, renderers, options);
 
