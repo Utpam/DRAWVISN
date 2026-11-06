@@ -7,12 +7,15 @@
  * the workspace controls and layout.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useFirebase";
 import { useToast } from "../components/Toast";
 import useBoards from "../hooks/useBoards";
 import BoardCard from "../components/BoardCard";
+import ConfirmDialog from "../components/ConfirmDialog";
+import ThemeToggle from "../components/ThemeToggle";
+import { useTheme } from "../hooks/useTheme";
 import "./Home.css";
 
 const getTimestamp = (value) => {
@@ -25,6 +28,7 @@ const getTimestamp = (value) => {
 
 function DashboardPage() {
   const { user, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const { toast } = useToast();
   const navigate = useNavigate();
   const {
@@ -41,6 +45,7 @@ function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("updatedAt");
   const [actionLoading, setActionLoading] = useState(null);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
 
   const filteredBoards = useMemo(() => {
@@ -56,6 +61,13 @@ function DashboardPage() {
       return getTimestamp(b[sortBy]) - getTimestamp(a[sortBy]);
     });
   }, [boards, searchQuery, sortBy]);
+
+  const recentBoards = useMemo(
+    () => [...boards]
+      .sort((a, b) => getTimestamp(b.updatedAt || b.createdAt) - getTimestamp(a.updatedAt || a.createdAt))
+      .slice(0, 3),
+    [boards]
+  );
 
   const boardCount = userDoc?.boardCount ?? boards.length;
   const boardLimit = userDoc?.boardLimit ?? 10;
@@ -84,16 +96,21 @@ function DashboardPage() {
   };
 
   const handleDelete = async (boardId, title) => {
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     setActionLoading(boardId);
     try {
       const result = await deleteBoard(boardId);
       if (result?.error) toast.error(result.error);
       else toast.success(`"${title}" deleted.`);
+    } catch (error) {
+      console.error("[DashboardPage] delete board error:", error);
+      toast.error("Couldn't delete this board. Please try again.");
     } finally {
       setActionLoading(null);
+      setDeleteCandidate(null);
     }
   };
+
+  const cancelDelete = useCallback(() => setDeleteCandidate(null), []);
 
   const handleDuplicate = async (boardId, title) => {
     if (atLimit) {
@@ -149,52 +166,54 @@ function DashboardPage() {
             <span>DRAVISN</span>
           </Link>
 
-          <details className="account-menu">
-            <summary className="account-menu__trigger" aria-label="Open account menu">
-              {user?.photoURL ? (
-                <img className="account-menu__avatar" src={user.photoURL} alt="" />
-              ) : (
-                <span className="account-menu__avatar account-menu__avatar--initials">
-                  {initials}
+          <div className="dashboard-header__actions">
+            <ThemeToggle id="btn-toggle-theme" isDark={isDark} onToggle={toggleTheme} />
+            <details className="account-menu">
+              <summary className="account-menu__trigger" aria-label="Open account menu">
+                {user?.photoURL ? (
+                  <img className="account-menu__avatar" src={user.photoURL} alt="" />
+                ) : (
+                  <span className="account-menu__avatar account-menu__avatar--initials">
+                    {initials}
+                  </span>
+                )}
+                <span className="account-menu__identity">
+                  <span className="account-menu__name">{displayName}</span>
+                  <span className="account-menu__plan">{userDoc?.plan || "Free"} plan</span>
                 </span>
-              )}
-              <span className="account-menu__identity">
-                <span className="account-menu__name">{displayName}</span>
-                <span className="account-menu__plan">{userDoc?.plan || "Free"} plan</span>
-              </span>
-              <svg aria-hidden="true" viewBox="0 0 16 16" className="account-menu__chevron">
-                <path d="m4 6 4 4 4-4" />
-              </svg>
-            </summary>
-            <div className="account-menu__popover">
-              <div className="account-menu__details">
-                <span className="account-menu__details-name">{displayName}</span>
-                {user?.email && <span className="account-menu__email">{user.email}</span>}
-                <span className="account-menu__plan-detail">
-                  {userDoc?.plan || "Free"} plan · {boardCount} of {boardLimit} boards
-                </span>
+                <svg aria-hidden="true" viewBox="0 0 16 16" className="account-menu__chevron">
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </summary>
+              <div className="account-menu__popover">
+                <div className="account-menu__details">
+                  <span className="account-menu__details-name">{displayName}</span>
+                  {user?.email && <span className="account-menu__email">{user.email}</span>}
+                  <span className="account-menu__plan-detail">
+                    {userDoc?.plan || "Free"} plan · {boardCount} of {boardLimit} boards
+                  </span>
+                </div>
+                <button
+                  id="btn-sign-out"
+                  className="account-menu__signout"
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={signingOut}
+                >
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
               </div>
-              <button
-                id="btn-sign-out"
-                className="account-menu__signout"
-                type="button"
-                onClick={handleLogout}
-                disabled={signingOut}
-              >
-                {signingOut ? "Signing out…" : "Sign out"}
-              </button>
-            </div>
-          </details>
+            </details>
+          </div>
         </div>
       </header>
 
       <main className="dashboard-main">
         <section className="workspace-heading" aria-labelledby="workspace-title">
           <div>
-            <p className="workspace-eyebrow">WORKSPACE</p>
-            <h1 id="workspace-title">My boards</h1>
+            <h1 id="workspace-title">Boards</h1>
             <p className="workspace-description">
-              Your ideas, all in one place.
+              Pick up where you left off.
             </p>
           </div>
           <button
@@ -247,6 +266,31 @@ function DashboardPage() {
             )}
           </label>
 
+          {!loading && recentBoards.length > 0 && (
+            <div className="recent-board-stack">
+              <span className="recent-board-stack__label">Recent</span>
+              <div className="recent-board-stack__items" aria-label="Recently edited boards">
+                {recentBoards.map((board, index) => (
+                  <button
+                    className="recent-board-stack__item"
+                    key={board.id}
+                    type="button"
+                    style={{ "--stack-index": index }}
+                    onClick={() => navigate(`/dashboard/${board.id}`)}
+                    title={board.title || "Untitled board"}
+                    aria-label={`Open recent board ${board.title || "Untitled board"}`}
+                  >
+                    {board.thumbnail ? (
+                      <img src={board.thumbnail} alt="" loading="lazy" />
+                    ) : (
+                      <span>{(board.title || "B").trim().charAt(0).toUpperCase()}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <label className="board-sort">
             <span>Sort by</span>
             <select
@@ -263,6 +307,25 @@ function DashboardPage() {
               <path d="m4 6 4 4 4-4" />
             </svg>
           </label>
+
+          <section className="usage-summary" aria-label="Board usage">
+            <div className="usage-summary__copy">
+              <span className="usage-summary__count">
+                {boardCount}<span>/{boardLimit}</span>
+              </span>
+              <span className="usage-summary__label">boards</span>
+            </div>
+            <div
+              className="usage-summary__track"
+              role="progressbar"
+              aria-label="Board limit usage"
+              aria-valuemin={0}
+              aria-valuemax={boardLimit}
+              aria-valuenow={Math.min(boardCount, boardLimit)}
+            >
+              <span style={{ width: `${limitPercent}%` }} />
+            </div>
+          </section>
         </section>
 
         <section className="board-library" aria-label="Your boards">
@@ -320,33 +383,24 @@ function DashboardPage() {
                   onOpen={() => navigate(`/dashboard/${board.id}`)}
                   onRename={(title) => handleRename(board.id, title)}
                   onDuplicate={() => handleDuplicate(board.id, board.title)}
-                  onDelete={() => handleDelete(board.id, board.title)}
+                  onDelete={() => setDeleteCandidate({ id: board.id, title: board.title })}
                 />
               ))}
             </div>
           )}
         </section>
 
-        <section className="usage-summary" aria-label="Board usage">
-          <div className="usage-summary__copy">
-            <span className="usage-summary__label">Board usage</span>
-            <span className="usage-summary__count">
-              {boardCount} <span>of {boardLimit} boards</span>
-            </span>
-          </div>
-          <div
-            className="usage-summary__track"
-            role="progressbar"
-            aria-label="Board limit usage"
-            aria-valuemin={0}
-            aria-valuemax={boardLimit}
-            aria-valuenow={Math.min(boardCount, boardLimit)}
-          >
-            <span style={{ width: `${limitPercent}%` }} />
-          </div>
-          <span className="usage-summary__plan">{userDoc?.plan || "Free"} plan</span>
-        </section>
       </main>
+      {deleteCandidate && (
+        <ConfirmDialog
+          title="Delete board?"
+          message={`"${deleteCandidate.title}" will be permanently deleted. This action cannot be undone.`}
+          confirmLabel="Delete board"
+          busy={actionLoading === deleteCandidate.id}
+          onCancel={cancelDelete}
+          onConfirm={() => handleDelete(deleteCandidate.id, deleteCandidate.title)}
+        />
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { useCollaboration } from "../hooks/useCollaboration.js";
 import CursorOverlay from "./CursorOverlay.jsx";
 import Collaborators from "./Collaborators.jsx";
 import ShareBoard from "./ShareBoard.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 import "./WhiteBoard.css";
 
 function WhiteBoard({
@@ -42,7 +43,8 @@ function WhiteBoard({
   });
   const [titleDraft, setTitleDraft] = useState(boardTitle);
   const [editingTitle, setEditingTitle] = useState(false);
-  const { theme, setTheme, isDark } = useTheme();
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const { toggleTheme, isDark } = useTheme();
   const previousIsDarkRef = useRef(null);
 
   // ── Collaboration Layer ──────────────────────────────────────────────────
@@ -78,6 +80,9 @@ function WhiteBoard({
     tool,
     shapes,
     setShapes,
+    replaceShapes,
+    undoShapes,
+    canUndo,
     addShape,
     updateShapes,
     deleteShapes,
@@ -184,7 +189,7 @@ function WhiteBoard({
   // ── Load initial shapes from Firestore once on mount ─────────────────────
   useEffect(() => {
     if (initialShapes && initialShapes.length > 0) {
-      setShapes(initialShapes);
+      replaceShapes(initialShapes);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -213,6 +218,7 @@ function WhiteBoard({
       x: textInput.x,
       y: textInput.y,
       text: textInput.value,
+      fontSize: textInput.fontSize ?? 16,
       style: { ...currentStyle },
       owner: user?.uid || "anon",
       createdBy: user?.uid || "anon",
@@ -225,9 +231,50 @@ function WhiteBoard({
     setTextInput(null);
   }, [textInput, generateId, currentStyle, user, setShapes, sendShapeCreate, setTextInput]);
 
-  // ── Keyboard shortcuts (delete, escape, ctrl+d duplicate) ─────────────────
+  const undoLastChange = useCallback(() => {
+    const restoredShapes = undoShapes();
+    if (!restoredShapes) return;
+
+    const currentById = new Map(shapes.map((shape) => [shape.id, shape]));
+    const restoredById = new Map(restoredShapes.map((shape) => [shape.id, shape]));
+    const deletedIds = shapes
+      .filter((shape) => !restoredById.has(shape.id))
+      .map((shape) => shape.id);
+    const createdShapes = restoredShapes.filter((shape) => !currentById.has(shape.id));
+    const updatedShapes = restoredShapes.filter((shape) => {
+      const current = currentById.get(shape.id);
+      return current && JSON.stringify(current) !== JSON.stringify(shape);
+    });
+
+    if (deletedIds.length > 0) sendShapesDelete(deletedIds);
+    createdShapes.forEach((shape) => sendShapeCreate(shape));
+    if (updatedShapes.length > 0) sendShapesUpdate(updatedShapes);
+    const restoredSelection = selectedIds.filter((id) => restoredById.has(id));
+    setSelectedIds(restoredSelection);
+    sendSelectionUpdate(restoredSelection);
+  }, [
+    undoShapes,
+    shapes,
+    selectedIds,
+    sendShapesDelete,
+    sendShapeCreate,
+    sendShapesUpdate,
+    sendSelectionUpdate,
+    setSelectedIds,
+  ]);
+
+  // ── Keyboard shortcuts (undo, delete, escape, ctrl+d duplicate) ───────────
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const target = e.target;
+      const isEditingText = target instanceof HTMLElement
+        && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !textInput && !isEditingText) {
+        e.preventDefault();
+        undoLastChange();
+        return;
+      }
+
       if (e.key === "Escape") {
         setTool("selectBox");
         setSelectedIds([]);
@@ -278,6 +325,7 @@ function WhiteBoard({
     setShapes,
     setSelectedIds,
     setTool,
+    undoLastChange,
     generateId,
     user,
     sendShapeCreate,
@@ -306,7 +354,19 @@ function WhiteBoard({
 
   return (
     <div className="whiteboard-shell">
-      <header className="whiteboard-header">
+      <button
+        className="whiteboard-menu-toggle"
+        type="button"
+        aria-label={headerVisible ? "Hide top bar" : "Show top bar"}
+        aria-expanded={headerVisible}
+        aria-controls="whiteboard-topbar"
+        onClick={() => setHeaderVisible((visible) => !visible)}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M3 5h14M3 10h14M3 15h14" />
+        </svg>
+      </button>
+      {headerVisible && <header id="whiteboard-topbar" className="whiteboard-header">
         <div className="whiteboard-header__left">
           <Link
             to="/dashboard"
@@ -363,7 +423,7 @@ function WhiteBoard({
           />
           <ShareBoard boardId={boardId} boardTitle={boardTitle} />
         </div>
-      </header>
+      </header>}
 
       {/* ── Canvas container ───────────────────────────────────────────────── */}
       <div
@@ -429,7 +489,7 @@ function WhiteBoard({
                 pointerEvents: "auto",
                 top: worldToScreen(textInput.x, textInput.y).y,
                 left: worldToScreen(textInput.x, textInput.y).x,
-                fontSize: `${16 * camera.zoom}px`,
+                fontSize: `${(textInput.fontSize ?? 16) * camera.zoom}px`,
                 padding: 0,
                 margin: 0,
                 background: "transparent",
@@ -443,6 +503,19 @@ function WhiteBoard({
 
         <div className="whiteboard-toolbar">
           <Toolbar setTool={setTool} tool={tool} />
+          <span className="whiteboard-toolbar__divider" />
+          <button
+            className="whiteboard-icon-button"
+            type="button"
+            onClick={undoLastChange}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14h-2" />
+            </svg>
+          </button>
           <span className="whiteboard-toolbar__divider" />
           <button
             id="btn-clear-canvas"
@@ -485,21 +558,17 @@ function WhiteBoard({
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12m-6-6h12" /></svg>
           </button>
         </div>
-
-        <label className="whiteboard-theme-control">
-          <span>Theme</span>
-          <select
-            id="btn-toggle-theme"
-            value={theme}
-            onChange={(event) => setTheme(event.target.value)}
-            aria-label={`Theme: ${theme}`}
-          >
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="system">System</option>
-          </select>
-        </label>
       </div>
+
+      <aside className="whiteboard-theme-panel" aria-label="Theme settings">
+        <span className="whiteboard-theme-panel__title">Appearance</span>
+        <ThemeToggle
+          id="btn-toggle-theme"
+          className="whiteboard-theme-panel__toggle"
+          isDark={isDark}
+          onToggle={toggleTheme}
+        />
+      </aside>
 
       {/* ── Style Panel (fixed, right edge) ──────────────────────────────── */}
       <StylePanel

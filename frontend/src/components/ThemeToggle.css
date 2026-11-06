@@ -1,0 +1,49 @@
+.theme-toggle {
+  --theme-toggle-bg: #101010;
+  --theme-toggle-border: #292929;
+  --theme-toggle-text: #a3a3a3;
+  --theme-toggle-hover: #ededed;
+
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-toggle-border);
+  border-radius: 5px;
+  background: var(--theme-toggle-bg);
+  color: var(--theme-toggle-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.theme-toggle:hover {
+  border-color: #555;
+  color: var(--theme-toggle-hover);
+}
+
+.theme-toggle > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+html[data-theme="light"] .theme-toggle {
+  --theme-toggle-bg: #f8f8f6;
+  --theme-toggle-border: #d7d7d3;
+  --theme-toggle-text: #555552;
+  --theme-toggle-hover: #111;
+}
+
+html[data-theme="light"] .theme-toggle:hover {
+  border-color: #aaa9a5;
+  background: #eeeeeB;
+}

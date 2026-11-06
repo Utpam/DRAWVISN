@@ -1,5 +1,13 @@
-import { useEffect, useRef } from "react";
-import { doCoordsIntersectShape, moveShape, getBoundingBox } from "./useTransform.js";
+import { useRef } from "react";
+import {
+    doCoordsIntersectShape,
+    getBoundingBox,
+    getResizeHandle,
+    getResizedBounds,
+    getSelectionBounds,
+    moveShape,
+    resizeShape,
+} from "./useTransform.js";
 import { resolveThemeStrokeColor } from "../utils/themeStroke.js";
 
 const pointToLineDistance = (point, lineStart, lineEnd) => {
@@ -71,13 +79,32 @@ const doPointsIntersectShape = (points, shape) => {
     return false;
 };
 
+const hasShapeGeometryChanged = (shape, original) => {
+    if (
+        shape.x !== original.x || shape.y !== original.y ||
+        shape.width !== original.width || shape.height !== original.height ||
+        shape.radiusX !== original.radiusX || shape.radiusY !== original.radiusY ||
+        shape.x1 !== original.x1 || shape.y1 !== original.y1 ||
+        shape.x2 !== original.x2 || shape.y2 !== original.y2 ||
+        shape.fontSize !== original.fontSize
+    ) return true;
 
-export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, selectedIds, setSelectedIds, currentStyle }, camera, renderers, options = {}) => {
+    return shape.points?.some((point, index) =>
+        point.x !== original.points?.[index]?.x ||
+        point.y !== original.points?.[index]?.y
+    ) ?? false;
+};
+
+export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, selectedIds, setSelectedIds, currentStyle, beginUndoGroup, endUndoGroup }, camera, renderers, options = {}) => {
     const currentStroke = useRef(null);
     const isDrawingRef = useRef(false);
-    const transformRef = useRef([])
+    const transformRef = useRef([]);
+    const activeIdsRef = useRef([]);
+    const initialSelectionBoundsRef = useRef(null);
+    const resizeHandleRef = useRef(null);
+    const transformedShapesRef = useRef([]);
+    const transformChangedRef = useRef(false);
     const startPos = useRef({ x: 0, y: 0 });  // reference for shapes
-    const prevPos = useRef({ x: 0, y: 0 });
     const actionMode = useRef(null);
     const generateId = () => crypto.randomUUID();
     const getShapeOwner = () => ({
@@ -108,25 +135,53 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
     // *** START DRAWING ***
     //
     const startDrawing = (e) => {
-    console.log(camera.camera);
-    
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d"); // Canvas Context
+    const ctx = canvas.getContext("2d");
     
     const { x, y } = getCoords(e);
 
     if (tool === "selectBox") {
         startPos.current = { x, y };
-        prevPos.current = { x, y };
-        // Check if we clicked on a shape
+        transformChangedRef.current = false;
+        const selectedShapes = shapes.filter((shape) => selectedIds.includes(shape.id));
+        const selectionBounds = getSelectionBounds(selectedShapes);
+        const handle = getResizeHandle(
+            x,
+            y,
+            selectionBounds,
+            10 / (camera.camera.zoom || 1)
+        );
+
+        if (handle) {
+            activeIdsRef.current = selectedShapes.map((shape) => shape.id);
+            transformRef.current = selectedShapes;
+            transformedShapesRef.current = selectedShapes;
+            initialSelectionBoundsRef.current = selectionBounds;
+            resizeHandleRef.current = handle;
+            actionMode.current = "RESIZE";
+            isDrawingRef.current = true;
+            return;
+        }
+
         const clickedShape = [...shapes].reverse().find(s => doCoordsIntersectShape(x, y, s));
         if (clickedShape) {
-            if (!selectedIds.includes(clickedShape.id)) {
-                setSelectedIds([clickedShape.id]);
+            const nextIds = selectedIds.includes(clickedShape.id)
+                ? selectedIds
+                : [clickedShape.id];
+            if (nextIds !== selectedIds) {
+                setSelectedIds(nextIds);
+                options?.onSelectionUpdate?.(nextIds);
             }
+            activeIdsRef.current = nextIds;
+            transformRef.current = shapes.filter((shape) => nextIds.includes(shape.id));
+            transformedShapesRef.current = transformRef.current;
             actionMode.current = "MOVE";
         } else {
             setSelectedIds([]);
+            options?.onSelectionUpdate?.([]);
+            activeIdsRef.current = [];
+            transformRef.current = [];
+            transformedShapesRef.current = [];
             actionMode.current = "SELECT";
         }
         isDrawingRef.current = true;
@@ -219,11 +274,39 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
 
         // RECTANGLE
         if (tool === "selectBox") {
-            if (actionMode.current === "MOVE") {
-                const dx = x - prevPos.current.x;
-                const dy = y - prevPos.current.y;
-                setShapes(prev => prev.map(s => selectedIds.includes(s.id) ? moveShape(s, dx, dy) : s));
-                prevPos.current = { x, y };
+            if (actionMode.current === "MOVE" || actionMode.current === "RESIZE") {
+                const initialBounds = initialSelectionBoundsRef.current;
+                let transformed;
+                if (actionMode.current === "MOVE") {
+                    const dx = x - startPos.current.x;
+                    const dy = y - startPos.current.y;
+                    transformed = transformRef.current.map((shape) => moveShape(shape, dx, dy));
+                } else if (initialBounds && resizeHandleRef.current) {
+                    const targetBounds = getResizedBounds(
+                        initialBounds,
+                        resizeHandleRef.current,
+                        { x, y },
+                        4 / (camera.camera.zoom || 1)
+                    );
+                    transformed = transformRef.current.map((shape) =>
+                        resizeShape(shape, initialBounds, targetBounds)
+                    );
+                }
+
+                if (transformed) {
+                    const hasChanged = transformed.some((shape, index) =>
+                        hasShapeGeometryChanged(shape, transformRef.current[index])
+                    );
+                    if (hasChanged) {
+                        beginUndoGroup?.();
+                        transformChangedRef.current = true;
+                    }
+                    transformedShapesRef.current = transformed;
+                    const transformedById = new Map(transformed.map((shape) => [shape.id, shape]));
+                    setShapes((previous) =>
+                        previous.map((shape) => transformedById.get(shape.id) ?? shape)
+                    );
+                }
             }
 
             const { x: startX, y: startY } = startPos.current;
@@ -240,8 +323,11 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 -camera.camera.y * camera.camera.zoom
             );
 
-            // redraw all saved shapes
-            shapes.forEach(shape => {
+            const previewById = new Map(
+                transformedShapesRef.current.map((shape) => [shape.id, shape])
+            );
+            const previewShapes = shapes.map((shape) => previewById.get(shape.id) ?? shape);
+            previewShapes.forEach(shape => {
                 if (!shape || !shape.type || !renderers[shape.type]) return;
                 renderers[shape.type](ctx, shape);
             });
@@ -513,10 +599,12 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
         }
 
         if (tool === "selectBox") {
-            if (actionMode.current === "MOVE") {
-                const movedShapes = shapes.filter(s => selectedIds.includes(s.id));
-                if (movedShapes.length > 0 && options?.onShapesUpdated) {
-                    options.onShapesUpdated(movedShapes);
+            if (actionMode.current === "MOVE" || actionMode.current === "RESIZE") {
+                const changedShapes = transformedShapesRef.current.filter((shape) =>
+                    activeIdsRef.current.includes(shape.id)
+                );
+                if (transformChangedRef.current && changedShapes.length > 0) {
+                    options?.onShapesUpdated?.(changedShapes);
                 }
             } else if (actionMode.current === "SELECT") {
                 const { x: startX, y: startY } = startPos.current;
@@ -526,13 +614,11 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 const maxX = Math.max(startX, x);
                 const maxY = Math.max(startY, y);
 
-                const newSelected = shapes.filter(s => {
-                    const bb = getBoundingBox(s);
+                const newSelected = shapes.filter((shape) => {
+                    const bb = getBoundingBox(shape);
                     if (!bb) return false;
-                    // Check if center of shape bounding box is within selection box
-                    const cx = (bb.minX + bb.maxX) / 2;
-                    const cy = (bb.minY + bb.maxY) / 2;
-                    return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+                    return bb.maxX >= minX && bb.minX <= maxX &&
+                        bb.maxY >= minY && bb.minY <= maxY;
                 }).map(s => s.id);
 
                 if (newSelected.length > 0) {
@@ -544,6 +630,12 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 }
             }
             actionMode.current = null;
+            transformRef.current = [];
+            transformedShapesRef.current = [];
+            activeIdsRef.current = [];
+            initialSelectionBoundsRef.current = null;
+            resizeHandleRef.current = null;
+            transformChangedRef.current = false;
         };
 
         if (tool === "rect") {
@@ -618,6 +710,7 @@ export const useDrawing = (canvasRef, { shapes, setShapes, tool, setTextInput, s
                 options.onShapeCreated(newShape);
             }
         };
+        endUndoGroup?.();
         isDrawingRef.current = false;
     };
     

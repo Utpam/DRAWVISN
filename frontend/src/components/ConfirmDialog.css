@@ -1,0 +1,102 @@
+.confirm-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 58%);
+}
+
+.confirm-dialog {
+  width: min(100%, 400px);
+  padding: 22px;
+  border: 1px solid var(--border, #292929);
+  border-radius: 7px;
+  background: var(--surface-1, #111);
+  color: var(--text-primary, #ededed);
+  box-shadow: 0 18px 56px rgb(0 0 0 / 38%);
+}
+
+.confirm-dialog__mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 15px;
+  place-items: center;
+  border: 1px solid var(--border-strong, #3a3a3a);
+  border-radius: 5px;
+  color: var(--text-secondary, #a3a3a3);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 620;
+}
+
+.confirm-dialog p {
+  margin: 8px 0 20px;
+  color: var(--text-secondary, #a3a3a3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-dialog__actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border, #292929);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.confirm-dialog__actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.confirm-dialog__cancel {
+  background: var(--surface-2, #181818);
+  color: var(--text-secondary, #a3a3a3);
+}
+
+.confirm-dialog__cancel:hover:not(:disabled) {
+  color: var(--text-primary, #ededed);
+}
+
+.confirm-dialog__confirm {
+  border-color: #b7b7b7 !important;
+  background: #d7d7d7;
+  color: #141414;
+}
+
+.confirm-dialog__confirm:hover:not(:disabled) {
+  border-color: #fff !important;
+  background: #eee;
+}
+
+html[data-theme="light"] .confirm-dialog {
+  box-shadow: 0 18px 56px rgb(0 0 0 / 20%);
+}
+
+html[data-theme="light"] .confirm-dialog__confirm {
+  border-color: #292928 !important;
+  background: #292928;
+  color: #f4f4f1;
+}
+
+html[data-theme="light"] .confirm-dialog__confirm:hover:not(:disabled) {
+  border-color: #111 !important;
+  background: #111;
+}

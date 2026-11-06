@@ -1,11 +1,17 @@
 export const pointToLineDistance = (point, lineStart, lineEnd) => {
-    const lineLengthSquared = Math.pow(lineStart.x - lineEnd.x, 2) + Math.pow(lineStart.y - lineEnd.y, 2);
-    if (lineLengthSquared === 0) return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
-    const dotProduct = ((point.x - lineStart.x) * (lineEnd.x - lineStart.x) + (point.y - lineStart.y) * (lineEnd.y - lineStart.y));
-    let t = Math.max(0, Math.min(1, dotProduct / lineLengthSquared));
+    const lineLengthSquared =
+        (lineEnd.x - lineStart.x) ** 2 + (lineEnd.y - lineStart.y) ** 2;
+    if (lineLengthSquared === 0) {
+        return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+    }
+
+    const projection = Math.max(0, Math.min(1, (
+        (point.x - lineStart.x) * (lineEnd.x - lineStart.x) +
+        (point.y - lineStart.y) * (lineEnd.y - lineStart.y)
+    ) / lineLengthSquared));
     const closest = {
-        x: lineStart.x + t * (lineEnd.x - lineStart.x),
-        y: lineStart.y + t * (lineEnd.y - lineStart.y)
+        x: lineStart.x + projection * (lineEnd.x - lineStart.x),
+        y: lineStart.y + projection * (lineEnd.y - lineStart.y),
     };
     return Math.hypot(point.x - closest.x, point.y - closest.y);
 };
@@ -21,10 +27,10 @@ export const getBoundingBox = (shape) => {
             };
         case "circle":
             return {
-                minX: shape.x - shape.radiusX,
-                minY: shape.y - shape.radiusY,
-                maxX: shape.x + shape.radiusX,
-                maxY: shape.y + shape.radiusY,
+                minX: shape.x - Math.abs(shape.radiusX),
+                minY: shape.y - Math.abs(shape.radiusY),
+                maxX: shape.x + Math.abs(shape.radiusX),
+                maxY: shape.y + Math.abs(shape.radiusY),
             };
         case "line":
             return {
@@ -35,51 +41,133 @@ export const getBoundingBox = (shape) => {
             };
         case "pen":
         case "eraser": {
-            if (!shape.points || shape.points.length === 0) return null;
-            let minX = shape.points[0].x, minY = shape.points[0].y, maxX = minX, maxY = minY;
-            shape.points.forEach(p => {
-                minX = Math.min(minX, p.x);
-                minY = Math.min(minY, p.y);
-                maxX = Math.max(maxX, p.x);
-                maxY = Math.max(maxY, p.y);
+            if (!shape.points?.length) return null;
+            return shape.points.reduce((bounds, point) => ({
+                minX: Math.min(bounds.minX, point.x),
+                minY: Math.min(bounds.minY, point.y),
+                maxX: Math.max(bounds.maxX, point.x),
+                maxY: Math.max(bounds.maxY, point.y),
+            }), {
+                minX: shape.points[0].x,
+                minY: shape.points[0].y,
+                maxX: shape.points[0].x,
+                maxY: shape.points[0].y,
             });
-            return { minX, minY, maxX, maxY };
         }
-        case "text":
-            const approxWidth = shape.text.length * 10;
-            const approxHeight = 24; 
+        case "text": {
+            const fontSize = Number.isFinite(shape.fontSize) ? shape.fontSize : 16;
             return {
                 minX: shape.x,
                 minY: shape.y,
-                maxX: shape.x + approxWidth,
-                maxY: shape.y + approxHeight,
+                maxX: shape.x + Math.max(fontSize, String(shape.text ?? "").length * fontSize * 0.6),
+                maxY: shape.y + fontSize * 1.25,
             };
+        }
         default:
             return null;
     }
 };
 
-export const doCoordsIntersectShape = (x, y, shape) => {
-    const bb = getBoundingBox(shape);
-    if (!bb) return false;
-    
-    const padding = 5;
-    if (x >= bb.minX - padding && x <= bb.maxX + padding && y >= bb.minY - padding && y <= bb.maxY + padding) {
-        if (shape.type === "circle") {
-            const dist = Math.hypot(x - shape.x, y - shape.y);
-            return dist <= shape.radiusX + shape.radiusY + padding;
-        } else if (shape.type === "line") {
-            const dist = pointToLineDistance({x, y}, {x: shape.x1, y: shape.y1}, {x: shape.x2, y: shape.y2});
-            return dist <= 10;
-        } else if (shape.type === "pen" || shape.type === "eraser") {
-            for (const sp of shape.points) {
-                if (Math.hypot(x - sp.x, y - sp.y) < 10) return true;
-            }
-            return false;
-        }
-        return true; 
+export const getSelectionBounds = (shapes) => {
+    const boxes = shapes.map(getBoundingBox).filter(Boolean);
+    if (!boxes.length) return null;
+    return boxes.reduce((bounds, box) => ({
+        minX: Math.min(bounds.minX, box.minX),
+        minY: Math.min(bounds.minY, box.minY),
+        maxX: Math.max(bounds.maxX, box.maxX),
+        maxY: Math.max(bounds.maxY, box.maxY),
+    }), { ...boxes[0] });
+};
+
+export const getResizeHandle = (x, y, bounds, tolerance) => {
+    if (!bounds) return null;
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const handles = [
+        ["nw", bounds.minX, bounds.minY],
+        ["n", centerX, bounds.minY],
+        ["ne", bounds.maxX, bounds.minY],
+        ["e", bounds.maxX, centerY],
+        ["se", bounds.maxX, bounds.maxY],
+        ["s", centerX, bounds.maxY],
+        ["sw", bounds.minX, bounds.maxY],
+        ["w", bounds.minX, centerY],
+    ];
+
+    return handles
+        .map(([name, handleX, handleY]) => ({
+            name,
+            distance: Math.hypot(x - handleX, y - handleY),
+        }))
+        .filter((handle) => handle.distance <= tolerance)
+        .sort((a, b) => a.distance - b.distance)[0]?.name ?? null;
+};
+
+export const getResizedBounds = (bounds, handle, point, minimumSize = 4) => {
+    let left = bounds.minX;
+    let right = bounds.maxX;
+    let top = bounds.minY;
+    let bottom = bounds.maxY;
+    const movesWest = handle.includes("w");
+    const movesEast = handle.includes("e");
+    const movesNorth = handle.includes("n");
+    const movesSouth = handle.includes("s");
+
+    if (movesWest) left = point.x;
+    if (movesEast) right = point.x;
+    if (movesNorth) top = point.y;
+    if (movesSouth) bottom = point.y;
+
+    if (Math.abs(right - left) < minimumSize) {
+        if (movesWest) left = right - minimumSize;
+        else if (movesEast) right = left + minimumSize;
     }
-    return false;
+    if (Math.abs(bottom - top) < minimumSize) {
+        if (movesNorth) top = bottom - minimumSize;
+        else if (movesSouth) bottom = top + minimumSize;
+    }
+
+    return {
+        minX: Math.min(left, right),
+        minY: Math.min(top, bottom),
+        maxX: Math.max(left, right),
+        maxY: Math.max(top, bottom),
+    };
+};
+
+export const doCoordsIntersectShape = (x, y, shape) => {
+    const bounds = getBoundingBox(shape);
+    if (!bounds) return false;
+    const padding = 6;
+    if (
+        x < bounds.minX - padding || x > bounds.maxX + padding ||
+        y < bounds.minY - padding || y > bounds.maxY + padding
+    ) return false;
+
+    if (shape.type === "circle") {
+        const radiusX = Math.abs(shape.radiusX);
+        const radiusY = Math.abs(shape.radiusY);
+        if (!radiusX || !radiusY) return Math.hypot(x - shape.x, y - shape.y) <= padding;
+        return ((x - shape.x) / radiusX) ** 2 + ((y - shape.y) / radiusY) ** 2 <= 1;
+    }
+    if (shape.type === "line") {
+        return pointToLineDistance(
+            { x, y },
+            { x: shape.x1, y: shape.y1 },
+            { x: shape.x2, y: shape.y2 }
+        ) <= padding;
+    }
+    if (shape.type === "pen" || shape.type === "eraser") {
+        const points = shape.points ?? [];
+        const tolerance = Math.max(padding, (shape.style?.strokeWidth ?? 1) / 2 + 3);
+        if (points.length === 1) {
+            return Math.hypot(x - points[0].x, y - points[0].y) <= tolerance;
+        }
+        return points.slice(1).some((point, index) =>
+            pointToLineDistance({ x, y }, points[index], point) <= tolerance
+        );
+    }
+    return true;
 };
 
 export const moveShape = (shape, dx, dy) => {
@@ -99,49 +187,66 @@ export const moveShape = (shape, dx, dy) => {
             break;
         case "pen":
         case "eraser":
-            newShape.points = shape.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+            newShape.points = shape.points.map((point) => ({
+                ...point,
+                x: point.x + dx,
+                y: point.y + dy,
+            }));
             break;
     }
     return newShape;
 };
 
-export const resizeShape = (shape, handlePos, dx, dy) => {
-    const newShape = { ...shape };
-    // very rudimentary resize based on bounding box change.
-    // more complex resizing can be added per shape type, but for standard rectangles:
-    if (shape.type === "rect") {
-        if (handlePos.includes("nw")) {
-            newShape.x += dx;
-            newShape.y += dy;
-            newShape.width -= dx;
-            newShape.height -= dy;
-        } else if (handlePos.includes("ne")) {
-            newShape.y += dy;
-            newShape.width += dx;
-            newShape.height -= dy;
-        } else if (handlePos.includes("sw")) {
-            newShape.x += dx;
-            newShape.width -= dx;
-            newShape.height += dy;
-        } else if (handlePos.includes("se")) {
-            newShape.width += dx;
-            newShape.height += dy;
+export const resizeShape = (shape, sourceBounds, targetBounds) => {
+    const sourceWidth = sourceBounds.maxX - sourceBounds.minX;
+    const sourceHeight = sourceBounds.maxY - sourceBounds.minY;
+    const scaleX = sourceWidth ? (targetBounds.maxX - targetBounds.minX) / sourceWidth : 1;
+    const scaleY = sourceHeight ? (targetBounds.maxY - targetBounds.minY) / sourceHeight : 1;
+    const mapX = (x) => targetBounds.minX + (x - sourceBounds.minX) * scaleX;
+    const mapY = (y) => targetBounds.minY + (y - sourceBounds.minY) * scaleY;
+    const resized = { ...shape };
+
+    switch (shape.type) {
+        case "rect": {
+            const x1 = mapX(shape.x);
+            const x2 = mapX(shape.x + shape.width);
+            const y1 = mapY(shape.y);
+            const y2 = mapY(shape.y + shape.height);
+            resized.x = Math.min(x1, x2);
+            resized.y = Math.min(y1, y2);
+            resized.width = Math.abs(x2 - x1);
+            resized.height = Math.abs(y2 - y1);
+            break;
         }
-    } else if (shape.type === "circle") {
-        // Just scale radius by the hypotenuse of dx,dy or distance
-        const sign = (dx + dy > 0) ? 1 : -1;
-        newShape.radius += sign * Math.hypot(dx, dy) * 0.5;
-        if (newShape.radius < 5) newShape.radius = 5;
-    } else if (shape.type === "line") {
-        // Move ending points if resizing handle matches start or end
-        if (handlePos === "start") {
-            newShape.x1 += dx;
-            newShape.y1 += dy;
-        } else if (handlePos === "end") {
-            newShape.x2 += dx;
-            newShape.y2 += dy;
-        }
+        case "circle":
+            resized.x = mapX(shape.x);
+            resized.y = mapY(shape.y);
+            resized.radiusX = Math.abs(shape.radiusX * scaleX);
+            resized.radiusY = Math.abs(shape.radiusY * scaleY);
+            break;
+        case "line":
+            resized.x1 = mapX(shape.x1);
+            resized.y1 = mapY(shape.y1);
+            resized.x2 = mapX(shape.x2);
+            resized.y2 = mapY(shape.y2);
+            break;
+        case "pen":
+        case "eraser":
+            resized.points = shape.points.map((point) => ({
+                ...point,
+                x: mapX(point.x),
+                y: mapY(point.y),
+            }));
+            break;
+        case "text":
+            resized.x = mapX(shape.x);
+            resized.y = mapY(shape.y);
+            resized.fontSize = Math.max(
+                4,
+                (Number.isFinite(shape.fontSize) ? shape.fontSize : 16) *
+                    Math.sqrt(Math.abs(scaleX * scaleY))
+            );
+            break;
     }
-    // pen text and eraser omit resizing for simplicity for now
-    return newShape;
+    return resized;
 };

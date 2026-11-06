@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { getBoundingBox } from "./useTransform.js";
+import { getBoundingBox, getSelectionBounds } from "./useTransform.js";
 import { applyStyle } from "../utils/applyStyle.js";
 import { DEFAULT_STYLE } from "../styles/defaultStyle.js";
 import { resolveThemeStrokeColor } from "../utils/themeStroke.js";
@@ -39,8 +39,8 @@ export const useRenderer = (
         // ── Selection box preview (not a user shape) ──────────────────────────
         selectBox: (ctx, shape) => {
             ctx.save();
-            ctx.strokeStyle = "rgba(100, 150, 255, 0.9)";
-            ctx.fillStyle   = "rgba(100, 150, 255, 0.08)";
+            ctx.strokeStyle = isDark ? "rgba(220, 220, 220, 0.82)" : "rgba(45, 45, 45, 0.78)";
+            ctx.fillStyle   = isDark ? "rgba(220, 220, 220, 0.06)" : "rgba(45, 45, 45, 0.05)";
             ctx.lineWidth   = 1;
             ctx.lineCap     = "round";
             ctx.lineJoin    = "round";
@@ -102,7 +102,15 @@ export const useRenderer = (
             applyStyle(ctx, s);
             ctx.beginPath();
             // ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
-            ctx.ellipse(shape.x, shape.y, shape.radiusX,shape.radiusY, 0, 0, 2 * Math.PI);
+            ctx.ellipse(
+                shape.x,
+                shape.y,
+                Math.abs(shape.radiusX),
+                Math.abs(shape.radiusY),
+                0,
+                0,
+                2 * Math.PI
+            );
             if (s.fillColor !== "transparent") {
                 ctx.fill();
             }
@@ -128,7 +136,7 @@ export const useRenderer = (
             const s = getThemeStyle(shape.style, isDark);
             ctx.save();
             ctx.globalAlpha   = s.opacity;
-            ctx.font          = "16px Arial";
+            ctx.font          = `${shape.fontSize ?? 16}px Arial`;
             ctx.fillStyle     = s.strokeColor;   // text colour = strokeColor
             ctx.textBaseline  = "top";
             ctx.shadowColor   = s.shadow ? s.shadowColor : "transparent";
@@ -175,39 +183,46 @@ export const useRenderer = (
             });
         }
 
-        // 3. Draw local selection highlights on top
-        shapes.forEach(shape => {
-            if (!selectedIds || !selectedIds.includes(shape.id)) return;
-
-            const bb = getBoundingBox(shape);
-            if (!bb) return;
-
+        // 3. Draw one resize frame around the full local selection.
+        const selectedShapes = shapes.filter((shape) => selectedIds?.includes(shape.id));
+        const selectionBounds = getSelectionBounds(selectedShapes);
+        if (selectionBounds) {
             ctx.save();
-            ctx.strokeStyle = "rgba(100, 150, 255, 0.9)";
-            ctx.lineWidth   = 1 / camera.zoom;
+            ctx.strokeStyle = isDark ? "rgba(220, 220, 220, 0.82)" : "rgba(45, 45, 45, 0.78)";
+            ctx.lineWidth = 1 / camera.zoom;
             ctx.setLineDash([]);
             ctx.globalAlpha = 1;
             ctx.shadowBlur  = 0;
             ctx.shadowColor = "transparent";
-            ctx.strokeRect(bb.minX, bb.minY, bb.maxX - bb.minX, bb.maxY - bb.minY);
+            ctx.strokeRect(
+                selectionBounds.minX,
+                selectionBounds.minY,
+                selectionBounds.maxX - selectionBounds.minX,
+                selectionBounds.maxY - selectionBounds.minY
+            );
 
-            // Corner handles
-            const handleSize = 8 / camera.zoom;
-            ctx.fillStyle   = "white";
+            const centerX = (selectionBounds.minX + selectionBounds.maxX) / 2;
+            const centerY = (selectionBounds.minY + selectionBounds.maxY) / 2;
+            const handleRadius = 4 / camera.zoom;
+            ctx.fillStyle = isDark ? "#171717" : "#f8f8f6";
 
             const drawHandle = (x, y) => {
                 ctx.beginPath();
-                ctx.arc(x, y, handleSize / 2, 0, Math.PI * 2);
+                ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
             };
 
-            drawHandle(bb.minX, bb.minY); // nw
-            drawHandle(bb.maxX, bb.minY); // ne
-            drawHandle(bb.minX, bb.maxY); // sw
-            drawHandle(bb.maxX, bb.maxY); // se
+            drawHandle(selectionBounds.minX, selectionBounds.minY);
+            drawHandle(centerX, selectionBounds.minY);
+            drawHandle(selectionBounds.maxX, selectionBounds.minY);
+            drawHandle(selectionBounds.maxX, centerY);
+            drawHandle(selectionBounds.maxX, selectionBounds.maxY);
+            drawHandle(centerX, selectionBounds.maxY);
+            drawHandle(selectionBounds.minX, selectionBounds.maxY);
+            drawHandle(selectionBounds.minX, centerY);
             ctx.restore();
-        });
+        }
 
         // 4. Draw remote collaborator selections with subtle colored dashes
         if (remoteSelections && Object.keys(remoteSelections).length > 0) {
@@ -230,7 +245,7 @@ export const useRenderer = (
 
         // Reset transform
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }, [canvasRef, shapes, camera, selectedIds, remoteStrokes, remoteSelections, renderers, renderKey]);
+    }, [canvasRef, shapes, camera, selectedIds, remoteStrokes, remoteSelections, renderers, renderKey, isDark]);
 
     return { renderers };
 };

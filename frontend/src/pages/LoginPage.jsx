@@ -9,9 +9,13 @@
 import React, { useState } from "react";
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useFirebase";
+import { useTheme } from "../hooks/useTheme";
+import ThemeToggle from "../components/ThemeToggle";
+import "./LoginPage.css";
 
 function LoginPage() {
   const { user, loading, login } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState(null);
@@ -45,51 +49,46 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4">
-      {/* Background glow */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[400px] w-[600px] rounded-full bg-indigo-600/8 blur-[100px]" />
-      </div>
+    <main className="login-page">
+      <ThemeToggle
+        id="btn-toggle-theme"
+        className="login-theme-toggle"
+        isDark={isDark}
+        onToggle={toggleTheme}
+      />
 
-      {/* Logo */}
-      <Link to="/" className="mb-10 flex items-center gap-2.5 group">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 transition-shadow">
-          <span className="text-white font-black text-base">D</span>
-        </div>
-        <span className="text-2xl font-bold tracking-tight text-white">DRAVISN</span>
+      <Link to="/" className="login-brand">
+        <span className="login-brand__mark" aria-hidden="true">D</span>
+        <span>DRAVISN</span>
       </Link>
 
-      {/* Card */}
-      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-gray-900/80 backdrop-blur-xl p-8 shadow-2xl">
-        <h1 className="text-2xl font-bold text-white text-center mb-1">
+      <section className="login-card">
+        <h1>
           Welcome back
         </h1>
-        <p className="text-sm text-gray-500 text-center mb-8">
+        <p className="login-card__description">
           Sign in to access your boards
         </p>
 
-        {/* Error message */}
         {error && (
-          <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <div className="login-error" role="alert">
             {error}
           </div>
         )}
 
-        {/* Google sign-in button */}
         <button
           id="btn-google-signin"
           onClick={handleLogin}
           disabled={signingIn || loading}
-          className="w-full flex items-center justify-center gap-3 rounded-xl bg-white px-5 py-3.5 text-gray-900 font-semibold text-sm hover:bg-gray-50 active:bg-gray-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+          className="login-google-button"
         >
           {signingIn ? (
             <>
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
+              <span className="login-spinner" aria-hidden="true" />
               Signing in…
             </>
           ) : (
             <>
-              {/* Google Logo SVG */}
               <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
                 <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.5 30.3 0 24 0 14.8 0 6.9 5.4 3 13.3l7.8 6C12.7 13 17.9 9.5 24 9.5z" />
                 <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z" />
@@ -101,27 +100,26 @@ function LoginPage() {
           )}
         </button>
 
-        <p className="mt-6 text-center text-xs text-gray-600">
+        {/* <p className="login-terms">
           By signing in, you agree to our{" "}
-          <span className="text-gray-500 hover:text-gray-400 cursor-pointer transition">
+          <span>
             Terms of Service
           </span>{" "}
           and{" "}
-          <span className="text-gray-500 hover:text-gray-400 cursor-pointer transition">
+          <span>
             Privacy Policy
           </span>
           .
-        </p>
-      </div>
+        </p> */}
+      </section>
 
-      {/* Back to home */}
       <Link
         to="/"
-        className="mt-8 text-sm text-gray-600 hover:text-gray-400 transition"
+        className="login-back"
       >
         ← Back to home
       </Link>
-    </div>
+    </main>
   );
 }
 

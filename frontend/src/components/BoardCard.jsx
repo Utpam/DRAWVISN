@@ -64,11 +64,12 @@ const getShapeBounds = (shape) => {
     }, null);
   }
   if (shape.type === "text" && finite(shape.x) && finite(shape.y)) {
+    const fontSize = finite(shape.fontSize) ? Number(shape.fontSize) : 16;
     return {
       minX: shape.x,
       minY: shape.y,
-      maxX: shape.x + Math.max(20, String(shape.text || "").length * 9),
-      maxY: shape.y + 24,
+      maxX: shape.x + Math.max(fontSize, String(shape.text || "").length * fontSize * 0.6),
+      maxY: shape.y + fontSize * 1.25,
     };
   }
   return null;
@@ -96,7 +97,6 @@ function BoardPreview({ board }) {
   if (bounds.length === 0) {
     return (
       <div className="board-preview__empty">
-        <span className="board-preview__empty-grid" aria-hidden="true" />
         <span>Empty board</span>
       </div>
     );
@@ -201,7 +201,7 @@ function BoardPreview({ board }) {
               y={shape.y}
               fill={stroke}
               stroke="none"
-              fontSize="16"
+              fontSize={shape.fontSize ?? 16}
             >
               {String(shape.text || "").slice(0, 40)}
             </text>

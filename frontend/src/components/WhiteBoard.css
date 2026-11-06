@@ -7,6 +7,31 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+html[data-theme="dark"] .whiteboard-shell {
+  --canvas-bg: #080808;
+  --canvas-dot: rgb(255 255 255 / 8%);
+  --surface-0: #080808;
+  --surface-1: #111;
+  --surface-2: #181818;
+  --surface-3: #242424;
+  --border: #292929;
+  --border-strong: #3a3a3a;
+  --text-primary: #ededed;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
+  --brand: #d7d7d7;
+  --brand-hover: #fff;
+  --brand-muted: rgb(255 255 255 / 8%);
+  --toolbar-bg: rgb(16 16 16 / 97%);
+  --toolbar-border: #292929;
+  --shadow-lg: 0 6px 20px rgb(0 0 0 / 28%);
+}
+
+html[data-theme="dark"] .whiteboard-shell .share-board__trigger,
+html[data-theme="dark"] .whiteboard-shell .share-board__copy {
+  color: #111;
+}
+
 .whiteboard-shell button,
 .whiteboard-shell input,
 .whiteboard-shell select {
@@ -18,7 +43,7 @@
 }
 
 .whiteboard-shell :focus-visible {
-  outline: 2px solid #a38ff7;
+  outline: 2px solid #c8c8c8;
   outline-offset: 2px;
 }
 
@@ -31,7 +56,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 20px;
+  padding: 0 20px 0 60px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-1) 94%, transparent);
   backdrop-filter: blur(12px);
@@ -47,6 +72,36 @@
 
 .whiteboard-header__right {
   gap: 12px;
+}
+
+.whiteboard-menu-toggle {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 70;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.whiteboard-menu-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.whiteboard-menu-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.6;
 }
 
 .whiteboard-back {
@@ -134,8 +189,8 @@
   min-width: 90px;
   height: 34px;
   padding: 4px 8px;
-  border: 1px solid #554b82;
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
   outline: 0;
   background: var(--surface-2);
   color: var(--text-primary);
@@ -143,7 +198,7 @@
 }
 
 .whiteboard-title-input:focus {
-  border-color: var(--brand);
+  border-color: #858585;
 }
 
 .whiteboard-canvas {
@@ -208,7 +263,7 @@
   gap: 7px;
   padding: 0 11px;
   border: 1px solid var(--brand);
-  border-radius: 7px;
+  border-radius: 5px;
   background: var(--brand);
   color: #fff;
   font-size: 11px;
@@ -247,7 +302,7 @@
   width: min(340px, calc(100vw - 24px));
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--surface-1);
   box-shadow: var(--shadow-lg);
 }
@@ -297,7 +352,7 @@
   gap: 6px;
   padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 5px;
   background: var(--surface-0);
 }
 
@@ -353,7 +408,7 @@
   align-items: center;
   padding: 2px 3px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 5px;
   background: transparent;
   cursor: pointer;
 }
@@ -411,7 +466,7 @@
   width: 220px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--surface-1);
   box-shadow: var(--shadow-lg);
 }
@@ -440,14 +495,13 @@
 }
 
 .whiteboard-toolbar,
-.whiteboard-zoom-controls,
-.whiteboard-theme-control {
+.whiteboard-zoom-controls {
   position: absolute;
   z-index: 45;
   display: flex;
   align-items: center;
   border: 1px solid var(--toolbar-border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--toolbar-bg);
   color: var(--text-secondary);
   box-shadow: var(--shadow-lg);
@@ -490,7 +544,7 @@
   flex: none;
   place-items: center;
   border: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -506,8 +560,8 @@
 
 .drawing-tool.is-active {
   background: var(--brand-muted);
-  color: #b7a8ff;
-  box-shadow: inset 0 0 0 1px rgb(118 89 232 / 35%);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 18%);
 }
 
 .drawing-tool > svg,
@@ -590,31 +644,65 @@
   font-variant-numeric: tabular-nums;
 }
 
-.whiteboard-theme-control {
-  right: 16px;
-  bottom: 20px;
-  height: 38px;
-  gap: 6px;
-  padding: 0 9px;
-  font-size: 10px;
-}
-
-.whiteboard-theme-control > span {
+.whiteboard-icon-button:disabled {
   color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
-.whiteboard-theme-control select {
-  max-width: 82px;
+.whiteboard-theme-panel {
+  position: absolute;
+  top: 76px;
+  left: 16px;
+  z-index: 45;
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 6px;
+  background: var(--toolbar-bg);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(14px);
+}
+
+.whiteboard-theme-panel__title {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.whiteboard-theme-panel__toggle {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.whiteboard-theme-panel__options {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-0);
+}
+
+.whiteboard-theme-panel__options button {
+  min-height: 28px;
+  padding: 0 8px;
   border: 0;
-  outline: 0;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
 }
 
-.whiteboard-theme-control option {
-  background: var(--surface-1);
+.whiteboard-theme-panel__options button:hover {
+  color: var(--text-primary);
+}
+
+.whiteboard-theme-panel__options button.is-active {
+  background: var(--surface-3);
   color: var(--text-primary);
 }
 
@@ -629,7 +717,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--surface-1);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
@@ -685,7 +773,7 @@
   flex: none;
   place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -757,13 +845,13 @@
   flex: none;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--swatch-color);
   cursor: pointer;
 }
 
 .property-swatch.is-active {
-  outline: 2px solid #a695f3;
+  outline: 2px solid #c8c8c8;
   outline-offset: 2px;
 }
 
@@ -809,7 +897,7 @@
   height: 28px;
   padding: 0 5px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--surface-2);
   color: var(--text-secondary);
   font-size: 10px;
@@ -823,9 +911,9 @@
 }
 
 .property-widths button.is-active {
-  border-color: rgb(118 89 232 / 55%);
+  border-color: rgb(255 255 255 / 38%);
   background: var(--brand-muted);
-  color: #c4b8ff;
+  color: var(--text-primary);
 }
 
 .property-range {
@@ -869,7 +957,7 @@
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 5px;
   background: var(--surface-0);
 }
 
@@ -879,7 +967,7 @@
   flex: 1;
   padding: 4px 6px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 10px;
@@ -911,6 +999,11 @@
   cursor: pointer;
 }
 
+html[data-theme="dark"] .whiteboard-shell .property-toggle input,
+html[data-theme="dark"] .whiteboard-shell .property-range input {
+  accent-color: #cfcfcf;
+}
+
 .whiteboard-shell ::-webkit-scrollbar {
   width: 5px;
 }
@@ -924,7 +1017,7 @@
   .whiteboard-header {
     height: 58px;
     gap: 8px;
-    padding: 0 12px;
+    padding: 0 12px 0 54px;
   }
 
   .whiteboard-header__left {
@@ -993,15 +1086,15 @@
     left: 10px;
   }
 
-  .whiteboard-theme-control {
-    right: 10px;
-    bottom: 60px;
+  .whiteboard-theme-panel {
+    top: 70px;
+    left: 8px;
   }
 }
 
 @media (max-width: 420px) {
   .whiteboard-header {
-    padding-inline: 8px;
+    padding-right: 8px;
   }
 
   .whiteboard-header__left,
@@ -1044,10 +1137,12 @@
 
   .whiteboard-toolbar {
     max-width: calc(100vw - 16px);
+    overflow-x: auto;
   }
 
   .drawing-tools {
     gap: 0;
+    flex: none;
   }
 
   .drawing-tools__group + .drawing-tools__group {

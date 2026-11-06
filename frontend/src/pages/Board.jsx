@@ -12,23 +12,19 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useFirebase";
 import { getBoard, renameBoard } from "../services/board.service";
 import useAutosave from "../hooks/useAutosave";
 import WhiteBoard from "../components/WhiteBoard";
 import { useToast } from "../components/Toast";
+import AppLoading from "../components/AppLoading";
 
 // ---------------------------------------------------------------------------
 // Loading Screen
 // ---------------------------------------------------------------------------
 function BoardLoadingScreen() {
-  return (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-950 gap-4">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-700 border-t-indigo-500" />
-      <p className="text-sm text-gray-500 tracking-wide">Loading whiteboard…</p>
-    </div>
-  );
+  return <AppLoading message="Loading whiteboard..." />;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,19 +32,19 @@ function BoardLoadingScreen() {
 // ---------------------------------------------------------------------------
 function BoardNotFoundScreen() {
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-950 gap-4 text-center px-6">
-      <div className="text-4xl">🗒️</div>
-      <h2 className="text-xl font-semibold text-white">Board not found</h2>
-      <p className="text-sm text-gray-500 max-w-xs">
+    <main className="app-status">
+      <span className="app-status__mark" aria-hidden="true">—</span>
+      <h2 className="app-status__title">Board not found</h2>
+      <p className="app-status__copy">
         This board doesn't exist or you may not have permission to view it.
       </p>
       <Link
         to="/dashboard"
-        className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition"
+        className="app-status__action"
       >
         Back to Dashboard
       </Link>
-    </div>
+    </main>
   );
 }
 

@@ -32,21 +32,12 @@ const ToastContext = createContext(null);
 const VARIANTS = {
   success: {
     icon: "✓",
-    bar: "bg-emerald-500",
-    icon_bg: "bg-emerald-500/20 text-emerald-400",
-    border: "border-emerald-500/30",
   },
   error: {
     icon: "✕",
-    bar: "bg-red-500",
-    icon_bg: "bg-red-500/20 text-red-400",
-    border: "border-red-500/30",
   },
   info: {
     icon: "i",
-    bar: "bg-indigo-500",
-    icon_bg: "bg-indigo-500/20 text-indigo-400",
-    border: "border-indigo-500/30",
   },
 };
 
@@ -102,7 +93,7 @@ function ToastContainer({ toasts, onDismiss }) {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none"
+      className="app-toast-stack"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
@@ -120,31 +111,21 @@ function ToastItem({ toast: t, onDismiss }) {
   return (
     <div
       role="alert"
-      className={`pointer-events-auto relative flex items-center gap-3 rounded-xl border ${v.border} bg-gray-900/95 backdrop-blur-sm px-4 py-3 shadow-2xl min-w-[280px] max-w-[380px] animate-slide-in`}
+      className="app-toast animate-slide-in"
+      data-variant={t.variant}
     >
-      {/* Icon */}
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${v.icon_bg}`}
-      >
+      <span className="app-toast__icon" aria-hidden="true">
         {v.icon}
       </span>
-
-      {/* Message */}
-      <p className="flex-1 text-sm text-gray-100 leading-snug">{t.message}</p>
-
-      {/* Dismiss button */}
+      <p className="app-toast__message">{t.message}</p>
       <button
         onClick={() => onDismiss(t.id)}
-        className="ml-1 shrink-0 text-gray-500 hover:text-gray-300 transition text-lg leading-none"
+        className="app-toast__dismiss"
         aria-label="Dismiss"
       >
         ×
       </button>
-
-      {/* Progress bar */}
-      <div
-        className={`absolute bottom-0 left-0 h-[3px] rounded-b-xl ${v.bar} animate-toast-progress`}
-      />
+      <div className="app-toast__progress animate-toast-progress" />
     </div>
   );
 }

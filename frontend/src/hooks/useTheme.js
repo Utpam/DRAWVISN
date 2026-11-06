@@ -11,7 +11,7 @@
 import { useState, useEffect } from "react";
 
 const STORAGE_KEY = "dravisn-theme";
-const DEFAULT_THEME = "dark";
+const DEFAULT_THEME = "system";
 const isValidTheme = (value) => ["dark", "light", "system"].includes(value);
 
 export const useTheme = () => {
@@ -53,13 +53,12 @@ export const useTheme = () => {
     }
   }, [theme, systemPrefersDark]);
 
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  const isDark = theme === "dark" || (theme === "system" && systemPrefersDark);
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   return {
     theme,
-    isDark: theme === "dark" || (theme === "system" && systemPrefersDark),
+    isDark,
     setTheme,
     toggleTheme,
   };
