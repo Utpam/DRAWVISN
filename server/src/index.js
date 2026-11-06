@@ -18,10 +18,18 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+const CLIENT_URLS = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
+const corsOptions = {
+  origin: (origin, callback) => {
+    callback(null, !origin || CLIENT_URLS.includes(origin));
+  },
+};
 
 // Middleware
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Basic health check endpoint
@@ -39,7 +47,7 @@ const server= http.createServer(app);
 // Attach Socket.IO to HTTP server with CORS support
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_URL,
+    ...corsOptions,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -55,6 +63,6 @@ registerSocketHandlers(io);
 server.listen(PORT, () => {
   console.log(`=======================================================`);
   console.log(`🚀 Drawvisn Realtime Server running on port ${PORT}`);
-  console.log(`🌐 Allowed Client Origin: ${CLIENT_URL}`);
+  console.log(`🌐 Allowed Client Origins: ${CLIENT_URLS.join(", ")}`);
   console.log(`=======================================================`);
 });
